@@ -1,8 +1,8 @@
 import { Injectable, PLATFORM_ID, Inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { BehaviorSubject, Observable, throwError } from 'rxjs';
-import { tap, catchError } from 'rxjs/operators';
+import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
+import { tap, catchError, map } from 'rxjs/operators';
 import { Router } from '@angular/router';
 import { environment } from '../../environments/environment';
 import { User, AuthResponse, LoginRequest, RegisterRequest } from '../models/user.model';
@@ -12,10 +12,9 @@ import { User, AuthResponse, LoginRequest, RegisterRequest } from '../models/use
 })
 export class AuthService {
     private readonly API_URL = environment.apiUrl;
-    private readonly TOKEN_KEY = 'cafe_auth_token';
-    private readonly USER_KEY = 'cafe_user';
+    private readonly TOKEN_KEY = 'laptop_auth_token';
 
-    private currentUserSubject = new BehaviorSubject<User | null>(this.loadUserFromStorage());
+    private currentUserSubject = new BehaviorSubject<User | null>(null);
     public currentUser$ = this.currentUserSubject.asObservable();
 
     private isBrowser: boolean;
@@ -48,23 +47,11 @@ export class AuthService {
     }
 
     /**
-     * Auto-login the recognized Telegram admin using verified Telegram Mini App initData
-     */
-    telegramLogin(initData: string): Observable<AuthResponse> {
-        return this.http.post<AuthResponse>(`${this.API_URL}/auth/telegram-login`, { initData })
-            .pipe(
-                tap(response => this.handleAuthSuccess(response)),
-                catchError(this.handleError)
-            );
-    }
-
-    /**
      * Logout user
      */
     logout(): void {
         if (this.isBrowser) {
             localStorage.removeItem(this.TOKEN_KEY);
-            localStorage.removeItem(this.USER_KEY);
         }
         this.currentUserSubject.next(null);
         this.router.navigate(['/login']);
@@ -89,7 +76,7 @@ export class AuthService {
      */
     isAdmin(): boolean {
         const user = this.currentUserValue;
-        return user?.email === environment.adminEmail;
+        return user?.role === 'admin';
     }
 
     /**
@@ -113,43 +100,38 @@ export class AuthService {
         });
     }
 
+    getMe(): Observable<User> {
+        return this.http.get<{ user: User }>(`${this.API_URL}/auth/me`, {
+            headers: this.getAuthHeaders()
+        }).pipe(
+            map((response) => response.user),
+            catchError(this.handleError)
+        );
+    }
+
+    loadCurrentUser(): Observable<User | null> {
+        if (!this.isLoggedIn()) {
+            this.currentUserSubject.next(null);
+            return of(null);
+        }
+
+        return this.getMe().pipe(
+            tap((user) => this.currentUserSubject.next(user)),
+            catchError(() => {
+                this.logout();
+                return of(null);
+            })
+        );
+    }
+
     /**
      * Handle successful authentication
      */
     private handleAuthSuccess(response: AuthResponse): void {
         if (this.isBrowser) {
             localStorage.setItem(this.TOKEN_KEY, response.token);
-            localStorage.setItem(this.USER_KEY, JSON.stringify(response.user));
         }
         this.currentUserSubject.next(response.user);
-    }
-
-    /**
-     * Load user from localStorage
-     */
-    private loadUserFromStorage(): User | null {
-        if (!this.isBrowser) {
-            return null;
-        }
-
-        try {
-            const userStr = localStorage.getItem(this.USER_KEY);
-            return userStr ? JSON.parse(userStr) : null;
-        } catch (error) {
-            console.error('Error loading user from storage:', error);
-            return null;
-        }
-    }
-
-    /**
-     * Reload user from localStorage and update observable
-     * Used to fix SSR hydration issue
-     */
-    reloadUserFromStorage(): void {
-        const user = this.loadUserFromStorage();
-        if (user) {
-            this.currentUserSubject.next(user);
-        }
     }
 
     /**

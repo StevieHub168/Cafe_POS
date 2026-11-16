@@ -1,17 +1,26 @@
 import { inject } from '@angular/core';
 import { Router, CanActivateFn } from '@angular/router';
+import { map } from 'rxjs/operators';
 import { AuthService } from '../services/auth.service';
 
-export const adminGuard: CanActivateFn = (route, state) => {
+export const adminGuard: CanActivateFn = () => {
     const authService = inject(AuthService);
     const router = inject(Router);
 
-    if (authService.isLoggedIn() && authService.isAdmin()) {
-        return true;
+    if (!authService.isLoggedIn()) {
+        router.navigate(['/login']);
+        return false;
     }
 
-    // If not admin, redirect to menu or home
-    console.warn('Access denied: Admin privileges required.');
-    router.navigate(['/menu']);
-    return false;
+    return authService.loadCurrentUser().pipe(
+        map((user) => {
+            if (user?.role === 'admin') {
+                return true;
+            }
+
+            console.warn('Access denied: Admin privileges required.');
+            router.navigate(['/menu']);
+            return false;
+        })
+    );
 };

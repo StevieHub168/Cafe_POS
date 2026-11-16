@@ -1,0 +1,104 @@
+<div class="space-y-6">
+  <app-page-header title="Dashboard">
+    <button type="button" (click)="load()" [disabled]="isLoading"
+      class="inline-flex items-center gap-1.5 rounded-lg border border-surface-border bg-white px-3.5 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50">
+      <svg class="h-4 w-4" [class.animate-spin]="isLoading" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
+      Refresh
+    </button>
+  </app-page-header>
+
+  <!-- Error -->
+  <div *ngIf="errorMessage" class="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+    <span>{{ errorMessage }}</span>
+    <button type="button" (click)="load()" class="font-semibold underline hover:no-underline">Try again</button>
+  </div>
+
+  <!-- Loading -->
+  <div *ngIf="isLoading && !stats" class="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5" aria-busy="true">
+    <div *ngFor="let n of [1,2,3,4,5]" class="h-28 animate-pulse rounded-lg border border-surface-border bg-white"></div>
+  </div>
+
+  <ng-container *ngIf="stats as s">
+
+    <!-- Numbers -->
+    <div class="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
+      <a routerLink="/products" class="block rounded-lg transition hover:-translate-y-0.5 hover:shadow-cardHover focus:outline-none focus:ring-2 focus:ring-primary-200">
+        <app-stat-card label="Total products" [value]="s.total" [sub]="s.archived > 0 ? s.archived + ' archived (not counted)' : 'all active products'">
+          <svg icon class="h-5 w-5 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" /></svg>
+        </app-stat-card>
+      </a>
+
+      <a *ngFor="let c of s.categories" routerLink="/products" [queryParams]="{ category: c.id }"
+        class="block rounded-lg transition hover:-translate-y-0.5 hover:shadow-cardHover focus:outline-none focus:ring-2 focus:ring-primary-200">
+        <app-stat-card [label]="c.name" [value]="c.count" [sub]="percent(c.count, s.total) + '% of all products'">
+          <svg icon class="h-5 w-5 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3zM6 6h.008v.008H6V6z" /></svg>
+        </app-stat-card>
+      </a>
+
+      <app-stat-card label="Stock counted" [value]="s.tracked" sub="products that track their stock">
+        <svg icon class="h-5 w-5 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>
+      </app-stat-card>
+
+      <app-stat-card label="Single items" [value]="s.single" sub="stock tracking off (stock 1)">
+        <svg icon class="h-5 w-5 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" /></svg>
+      </app-stat-card>
+    </div>
+
+    <!-- Nothing yet -->
+    <div *ngIf="s.total === 0" class="rounded-lg border border-dashed border-surface-border bg-white px-6 py-12 text-center">
+      <p class="text-base font-medium text-gray-700">No products yet</p>
+      <p class="mt-1 text-sm text-gray-400">Add your first product and the numbers will appear here.</p>
+      <a routerLink="/products" class="mt-4 inline-flex rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700">Go to Products</a>
+    </div>
+
+    <!-- Products per brand, one card per category -->
+    <div *ngIf="s.total > 0" class="grid gap-6 lg:grid-cols-2">
+      <section *ngFor="let c of s.categories" class="rounded-lg border border-surface-border bg-white p-5 shadow-card" [attr.aria-label]="c.name + ' products per brand'">
+        <header class="mb-4 flex items-baseline justify-between gap-3">
+          <h2 class="text-sm font-semibold text-gray-900">{{ c.name }} <span class="font-normal text-gray-400">by brand</span></h2>
+          <a routerLink="/products" [queryParams]="{ category: c.id }" class="text-xs font-medium text-primary-600 hover:underline">{{ c.count }} product(s) →</a>
+        </header>
+
+        <p *ngIf="c.count === 0" class="py-6 text-center text-sm text-gray-400">No products in {{ c.name }} yet.</p>
+
+        <ul *ngIf="c.count > 0" class="space-y-2.5">
+          <li *ngFor="let b of c.brands">
+            <a routerLink="/products" [queryParams]="{ category: c.id, brand: b.name }"
+              class="group block rounded-md px-2 py-1.5 transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-200">
+              <div class="flex items-center justify-between text-sm">
+                <span class="font-medium" [class.text-gray-800]="b.count > 0" [class.text-gray-400]="b.count === 0">{{ b.name }}</span>
+                <span class="tabular-nums text-gray-500">{{ b.count }} <span class="text-xs text-gray-400">· {{ percent(b.count, c.count) }}%</span></span>
+              </div>
+              <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-gray-100">
+                <div class="bar-fill h-full rounded-full bg-primary-500" [style.width.%]="percent(b.count, c.count)"></div>
+              </div>
+            </a>
+          </li>
+          <li *ngIf="c.noBrand > 0" class="px-2 py-1.5">
+            <div class="flex items-center justify-between text-sm">
+              <span class="font-medium text-gray-500">No brand</span>
+              <span class="tabular-nums text-gray-500">{{ c.noBrand }} <span class="text-xs text-gray-400">· {{ percent(c.noBrand, c.count) }}%</span></span>
+            </div>
+            <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-gray-100">
+              <div class="bar-fill h-full rounded-full bg-gray-400" [style.width.%]="percent(c.noBrand, c.count)"></div>
+            </div>
+          </li>
+        </ul>
+      </section>
+    </div>
+
+    <!-- Stock counted vs single items -->
+    <section *ngIf="s.total > 0" class="rounded-lg border border-surface-border bg-white p-5 shadow-card" aria-label="Stock tracking">
+      <h2 class="mb-4 text-sm font-semibold text-gray-900">Stock tracking</h2>
+      <div class="flex h-3 overflow-hidden rounded-full bg-gray-100" role="img"
+        [attr.aria-label]="s.tracked + ' products count stock, ' + s.single + ' are single items'">
+        <div class="bar-fill h-full bg-primary-500" [style.width.%]="percent(s.tracked, s.total)"></div>
+        <div class="bar-fill h-full bg-gray-300" [style.width.%]="percent(s.single, s.total)"></div>
+      </div>
+      <div class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+        <span class="inline-flex items-center gap-2 text-gray-700"><span class="h-2.5 w-2.5 rounded-full bg-primary-500"></span>Counted <strong class="tabular-nums">{{ s.tracked }}</strong><span class="ml-1 text-xs text-gray-400">({{ percent(s.tracked, s.total) }}%)</span></span>
+        <span class="inline-flex items-center gap-2 text-gray-700"><span class="h-2.5 w-2.5 rounded-full bg-gray-300"></span>Single items <strong class="tabular-nums">{{ s.single }}</strong><span class="ml-1 text-xs text-gray-400">({{ percent(s.single, s.total) }}%)</span></span>
+      </div>
+    </section>
+  </ng-container>
+</div>

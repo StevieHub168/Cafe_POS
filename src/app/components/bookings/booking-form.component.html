@@ -1,0 +1,132 @@
+<form (ngSubmit)="submit()" (keydown.meta.enter)="submit()" (keydown.control.enter)="submit()" novalidate class="flex min-h-0 flex-1 flex-col">
+  <div class="flex-1 space-y-5 overflow-y-auto p-5">
+
+    <!-- Product: type to find one of your products, or write anything -->
+    <div>
+      <label for="b-product" class="mb-1 block text-xs font-medium text-gray-700">Product <span class="text-red-500">*</span></label>
+      <input id="b-product" type="text" name="product_name" [(ngModel)]="form.product_name" (ngModelChange)="onProductInput()"
+        (blur)="hideSuggestions()" (keydown.enter)="pickFirstSuggestion($event)" autocomplete="off" maxlength="255"
+        placeholder="e.g. MacBook Air M5 | RAM 16GB | SSD 512GB"
+        class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+
+      <!-- Your products that match what is typed: click one to fill the name and price -->
+      <ul *ngIf="productSuggestions.length > 0" aria-label="Your products that match"
+        class="mt-1 divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-white shadow-sm">
+        <li *ngFor="let suggestion of productSuggestions">
+          <button type="button" (mousedown)="$event.preventDefault(); pickProduct(suggestion)"
+            class="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-gray-50">
+            <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded bg-gray-100">
+              <img *ngIf="suggestion.image_url" [src]="suggestion.image_url | imgSrc" alt="" class="h-full w-full object-cover" />
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-sm font-medium text-gray-900">{{ suggestion.name }}</span>
+              <span class="block truncate text-xs text-gray-400">{{ suggestion.brand }} {{ suggestion.model }}</span>
+            </span>
+            <span class="text-sm font-medium tabular-nums text-gray-700">{{ money(suggestion.selling_price) }}</span>
+          </button>
+        </li>
+      </ul>
+
+      <!-- Picked from your products -->
+      <p *ngIf="linkedProduct as linked" class="mt-1.5 flex items-center gap-2 text-xs text-gray-500">
+        <span class="min-w-0 truncate">From your products: <span class="font-medium text-gray-700">{{ linked.name }}</span> · {{ money(linked.selling_price) }}</span>
+        <button type="button" (click)="unlinkProduct()" class="ml-auto flex-shrink-0 rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600" aria-label="Do not link this product">✕</button>
+      </p>
+      <!-- What saving does to the stock of this laptop -->
+      <p *ngIf="holdNote" class="mt-1 text-xs" [ngClass]="holdBlocked ? 'text-red-600' : 'text-gray-500'" data-hold-note>{{ holdNote }}</p>
+      <div *ngIf="priceOptions.length > 1" class="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Prices of this product">
+        <button *ngFor="let option of priceOptions" type="button" (click)="chooseOption(option)"
+          class="rounded-md border px-2 py-1 text-xs transition"
+          [ngClass]="option.name === form.product_name && option.price === form.full_price
+            ? 'border-primary-500 bg-primary-50 font-medium text-primary-700'
+            : 'border-surface-border bg-white text-gray-600 hover:bg-gray-50'">
+          {{ option.label }} · {{ money(option.price) }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Contact -->
+    <div class="grid gap-3 sm:grid-cols-2">
+      <div>
+        <label for="b-phone" class="mb-1 block text-xs font-medium text-gray-700">Phone</label>
+        <input id="b-phone" type="tel" name="phone" [(ngModel)]="form.phone" inputmode="tel" autocomplete="off" maxlength="20" placeholder="011 968 240"
+          class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+      </div>
+      <div>
+        <label for="b-telegram" class="mb-1 block text-xs font-medium text-gray-700">Telegram</label>
+        <input id="b-telegram" type="text" name="telegram" [(ngModel)]="form.telegram" autocomplete="off" autocapitalize="off" maxlength="60" placeholder="@username"
+          class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+      </div>
+    </div>
+    <p class="-mt-4 text-[11px] text-gray-400">Phone or Telegram: at least one.</p>
+
+    <!-- Money -->
+    <div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label for="b-price" class="mb-1 block text-xs font-medium text-gray-700">Full price <span class="text-red-500">*</span></label>
+          <div class="relative">
+            <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">$</span>
+            <input id="b-price" type="number" name="full_price" [(ngModel)]="form.full_price" (input)="onPriceInput()" min="0" step="0.01" inputmode="decimal" placeholder="0.00"
+              class="w-full rounded-lg border border-surface-border py-2 pl-7 pr-3 text-sm tabular-nums focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+          </div>
+        </div>
+        <div>
+          <label for="b-deposit" class="mb-1 block text-xs font-medium text-gray-700">Deposit</label>
+          <div class="relative">
+            <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">$</span>
+            <input id="b-deposit" type="number" name="deposit" [(ngModel)]="form.deposit" min="0" step="0.01" inputmode="decimal" placeholder="0.00"
+              class="w-full rounded-lg border border-surface-border py-2 pl-7 pr-3 text-sm tabular-nums focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+          </div>
+        </div>
+      </div>
+      <p class="mt-2 flex items-center justify-between rounded-lg px-3 py-2 text-sm" aria-live="polite"
+        [ngClass]="depositTooBig ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-700'">
+        <span>Remaining balance</span>
+        <span class="font-semibold tabular-nums">{{ depositTooBig ? 'Deposit is more than the price' : money(remaining) }}</span>
+      </p>
+    </div>
+
+    <!-- Dates -->
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label for="b-booked" class="mb-1 block text-xs font-medium text-gray-700">Booking date <span class="text-red-500">*</span></label>
+        <input id="b-booked" type="date" name="booking_date" [(ngModel)]="form.booking_date"
+          class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+        <p class="mt-1 min-h-[1rem] text-[11px] text-gray-500">{{ dateLabel(form.booking_date) }}</p>
+      </div>
+      <div>
+        <label for="b-pickup" class="mb-1 block text-xs font-medium text-gray-700">Pickup date <span class="text-red-500">*</span></label>
+        <input id="b-pickup" type="date" name="pickup_date" [(ngModel)]="form.pickup_date" [attr.min]="form.booking_date || null"
+          class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+        <p class="mt-1 min-h-[1rem] text-[11px] text-gray-500">{{ dateLabel(form.pickup_date) }}</p>
+      </div>
+    </div>
+
+    <!-- Photos, e.g. the deposit receipt -->
+    <app-photo-upload [(photos)]="form.images" [max]="maxPhotos" label="Photos (e.g. deposit receipt)"
+      (uploadingChange)="uploading = $event"></app-photo-upload>
+
+    <!-- Status -->
+    <div>
+      <label for="b-status" class="mb-1 block text-xs font-medium text-gray-700">Status</label>
+      <select id="b-status" name="status" [(ngModel)]="form.status"
+        class="w-full rounded-lg border border-surface-border bg-white px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100">
+        <option *ngFor="let status of statuses" [ngValue]="status.value">{{ status.label }}</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Footer: the message is here (not at the top) so it is always in view -->
+  <div class="flex-shrink-0 border-t border-surface-border bg-white px-5 py-3">
+    <p *ngIf="formError" role="alert" class="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{{ formError }}</p>
+    <div class="flex justify-end gap-2">
+      <button type="button" (click)="cancel()" [disabled]="isSubmitting"
+        class="rounded-lg border border-surface-border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
+      <button type="submit" [disabled]="isSubmitting || uploading"
+        class="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-60">
+        {{ isSubmitting ? 'Saving...' : (uploading ? 'Uploading...' : (booking ? 'Save changes' : 'Save booking')) }}
+      </button>
+    </div>
+  </div>
+</form>

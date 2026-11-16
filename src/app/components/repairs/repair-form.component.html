@@ -1,0 +1,142 @@
+<div class="repair-backdrop fixed inset-0 z-50 flex justify-end bg-gray-900/50" (click)="close()">
+  <div class="repair-panel flex h-full w-full max-w-xl flex-col bg-white shadow-2xl" role="dialog" aria-modal="true"
+       [attr.aria-label]="title" (click)="$event.stopPropagation()">
+
+    <div class="flex flex-shrink-0 items-center justify-between border-b border-surface-border px-5 py-4">
+      <div class="min-w-0">
+        <button *ngIf="backLabel" type="button" (click)="close()"
+          class="mb-1 inline-flex items-center gap-1 rounded text-xs font-medium text-primary-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
+          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+          {{ backLabel }}
+        </button>
+        <h2 class="text-base font-semibold text-gray-900">{{ title }}</h2>
+        <p class="text-xs text-gray-500">
+          <ng-container *ngIf="!repair; else editing">Step 1 of 3: <span class="font-semibold text-amber-800">Received</span></ng-container>
+          <ng-template #editing>{{ repair?.device }}</ng-template>
+        </p>
+      </div>
+      <button type="button" (click)="close()" class="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600" aria-label="Close">
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+      </button>
+    </div>
+
+    <form (ngSubmit)="submit()" (keydown.meta.enter)="submit()" (keydown.control.enter)="submit()" novalidate class="flex min-h-0 flex-1 flex-col">
+      <div class="flex-1 space-y-5 overflow-y-auto p-5">
+
+        <div *ngIf="formError" role="alert" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{{ formError }}</div>
+
+        <!-- Whose laptop -->
+        <div role="radiogroup" aria-label="Whose laptop is it?" class="grid grid-cols-2 gap-2">
+          <button type="button" role="radio" [attr.aria-checked]="form.source === 'shop'" (click)="chooseSource('shop')"
+            class="rounded-xl border px-3.5 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            [ngClass]="form.source === 'shop' ? 'border-primary-600 bg-primary-50' : 'border-surface-border bg-white hover:bg-gray-50'">
+            <span class="block text-sm font-semibold" [ngClass]="form.source === 'shop' ? 'text-primary-900' : 'text-gray-900'">A laptop of my shop</span>
+            <span class="mt-0.5 block text-xs text-gray-500">Pick it from Products</span>
+          </button>
+          <button type="button" role="radio" [attr.aria-checked]="form.source === 'customer'" (click)="chooseSource('customer')"
+            class="rounded-xl border px-3.5 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+            [ngClass]="form.source === 'customer' ? 'border-primary-600 bg-primary-50' : 'border-surface-border bg-white hover:bg-gray-50'">
+            <span class="block text-sm font-semibold" [ngClass]="form.source === 'customer' ? 'text-primary-900' : 'text-gray-900'">A customer's laptop</span>
+            <span class="mt-0.5 block text-xs text-gray-500">Type the name</span>
+          </button>
+        </div>
+
+        <div>
+          <ng-container *ngIf="form.source === 'shop'; else typed">
+            <label for="r-laptop" class="mb-1 block text-xs font-medium text-gray-700">Laptop <span class="text-red-500">*</span></label>
+            <select id="r-laptop" name="product_id" [(ngModel)]="form.product_id" (ngModelChange)="pickLaptop()"
+              class="w-full rounded-lg border border-surface-border bg-white px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100">
+              <option [ngValue]="null">Pick a laptop...</option>
+              <option *ngFor="let laptop of shopLaptops" [ngValue]="laptop.id">{{ laptopLabel(laptop) }}</option>
+            </select>
+            <p *ngIf="holdNote" class="mt-1 text-xs text-gray-500" data-hold-note>{{ holdNote }}</p>
+            <p *ngIf="shopLaptops.length === 0" class="mt-1 text-[11px] text-gray-500">There are no laptops in Products yet. Choose "A customer's laptop" and type the name.</p>
+          </ng-container>
+          <ng-template #typed>
+            <label for="r-device" class="mb-1 block text-xs font-medium text-gray-700">Laptop or device <span class="text-red-500">*</span></label>
+            <input id="r-device" type="text" name="device" [(ngModel)]="form.device" [attr.maxlength]="maxDevice" autocomplete="off" placeholder="e.g. Lenovo ThinkPad T14"
+              class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+          </ng-template>
+        </div>
+
+        <!-- Customer -->
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label for="r-customer" class="mb-1 block text-xs font-medium text-gray-700">Customer</label>
+            <input id="r-customer" type="text" name="customer_name" [(ngModel)]="form.customer_name" maxlength="100" autocomplete="off" placeholder="Name"
+              class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+          </div>
+          <div>
+            <label for="r-phone" class="mb-1 block text-xs font-medium text-gray-700">Phone</label>
+            <input id="r-phone" type="tel" name="phone" [(ngModel)]="form.phone" inputmode="tel" autocomplete="off" maxlength="20" placeholder="011 968 240"
+              class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+          </div>
+        </div>
+        <div>
+          <label for="r-telegram" class="mb-1 block text-xs font-medium text-gray-700">Telegram <span class="font-normal text-gray-500">(optional)</span></label>
+          <input id="r-telegram" type="text" name="telegram" [(ngModel)]="form.telegram" autocomplete="off" autocapitalize="off" maxlength="60" placeholder="@username"
+            class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+        </div>
+
+        <!-- The problem -->
+        <div>
+          <label for="r-problem" class="mb-1 block text-xs font-medium text-gray-700">What is wrong? <span class="text-red-500">*</span></label>
+          <textarea id="r-problem" name="problem" [(ngModel)]="form.problem" rows="3" [attr.maxlength]="maxProblem" placeholder="e.g. Does not turn on. The charger light is on."
+            class="w-full resize-none rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100"></textarea>
+          <p class="mt-1 text-right text-[11px] tabular-nums text-gray-500">{{ form.problem.length }} / {{ maxProblem }}</p>
+        </div>
+
+        <!-- Dates and cost -->
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label for="r-received" class="mb-1 block text-xs font-medium text-gray-700">Received <span class="text-red-500">*</span></label>
+            <input id="r-received" type="date" name="received_date" [(ngModel)]="form.received_date"
+              class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+          </div>
+          <div>
+            <label for="r-backon" class="mb-1 block text-xs font-medium text-gray-700">Back on <span class="font-normal text-gray-500">(optional)</span></label>
+            <input id="r-backon" type="date" name="back_on" [(ngModel)]="form.back_on"
+              class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+          </div>
+          <div>
+            <label for="r-cost" class="mb-1 block text-xs font-medium text-gray-700">Cost <span class="font-normal text-gray-500">(optional)</span></label>
+            <div class="relative">
+              <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">$</span>
+              <input id="r-cost" type="number" name="cost" [(ngModel)]="form.cost" min="0" step="0.01" inputmode="decimal" placeholder="0.00"
+                class="w-full rounded-lg border border-surface-border py-2 pl-7 pr-3 text-sm tabular-nums focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+            </div>
+          </div>
+        </div>
+        <p class="-mt-3 min-h-[1rem] text-[11px] text-gray-500">{{ dateLabel(form.received_date) }}</p>
+
+        <!-- When the shop sold this laptop -->
+        <div *ngIf="saleNote" data-sale-note class="flex gap-2.5 rounded-xl border border-green-200 bg-green-50 px-3.5 py-3 text-sm text-green-900">
+          <svg class="mt-0.5 h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3l7 3v6c0 4.500-3 7.500-7 9-4-1.500-7-4.500-7-9V6zM9 12l2 2 4-4" /></svg>
+          <span>{{ saleNote }} The cost can be $0 if the warranty covers it.</span>
+        </div>
+
+        <!-- The invoice is optional (only for a new repair) -->
+        <div *ngIf="!repair" class="flex items-center gap-3 rounded-xl border border-surface-border bg-white px-3.5 py-3">
+          <div class="min-w-0 flex-1">
+            <p id="r-invoice-label" class="text-sm font-semibold text-gray-900">Make an invoice now</p>
+            <p class="mt-0.5 text-xs text-gray-500">Optional. You can make it later, when the customer picks up.</p>
+          </div>
+          <button type="button" role="switch" [attr.aria-checked]="form.makeInvoice" aria-labelledby="r-invoice-label" (click)="form.makeInvoice = !form.makeInvoice"
+            class="relative h-7 w-12 flex-shrink-0 rounded-full transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
+            [ngClass]="form.makeInvoice ? 'bg-primary-600' : 'bg-gray-400'">
+            <span class="absolute left-[3px] top-[3px] h-[22px] w-[22px] rounded-full bg-white shadow transition-transform" [ngClass]="form.makeInvoice ? 'translate-x-5' : ''"></span>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex flex-shrink-0 gap-3 border-t border-surface-border bg-white px-5 py-4">
+        <button type="button" (click)="close()" [disabled]="isSubmitting"
+          class="flex-1 rounded-xl border border-surface-border bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:opacity-50">Cancel</button>
+        <button type="submit" [disabled]="isSubmitting"
+          class="flex-[2] rounded-xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:opacity-60">
+          {{ isSubmitting ? 'Saving...' : (repair ? 'Save changes' : 'Save repair') }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

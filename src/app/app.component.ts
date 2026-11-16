@@ -1,58 +1,84 @@
-import { Component, OnInit } from '@angular/core';
-import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
+import { Component, OnInit, OnDestroy } from '@angular/core';
+import { RouterOutlet, NavigationEnd, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
-import { MatBottomSheet, MatBottomSheetModule } from '@angular/material/bottom-sheet';
-import { CartService } from './services/cart.service';
 import { AuthService } from './services/auth.service';
-import { TelegramMiniAppService } from './services/telegram-mini-app.service';
-import { Observable } from 'rxjs';
+import { Observable, Subject, takeUntil } from 'rxjs';
 import { User } from './models/user.model';
-import { MobileMenuComponent } from './components/mobile-menu/mobile-menu.component';
+import { SidebarComponent } from './components/ui/sidebar.component';
+import { HeaderComponent } from './components/ui/header.component';
+import { TelegramToastsComponent } from './components/ui/telegram-toasts.component';
+
+const ROUTE_TITLES: Record<string, string> = {
+  '/menu': 'Menu',
+  '/products': 'Products',
+  '/sales': 'Sales',
+  '/bookings': 'Bookings',
+  '/repairs': 'Repairs',
+  '/dashboard': 'Dashboard',
+  '/labels': 'Print labels',
+  '/register': 'Create User',
+};
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, CommonModule, MatBottomSheetModule],
+  standalone: true,
+  imports: [RouterOutlet, CommonModule, SidebarComponent, HeaderComponent, TelegramToastsComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css'
 })
-export class AppComponent implements OnInit {
-  title = 'cafe';
-  cartCount$: Observable<number>;
+export class AppComponent implements OnInit, OnDestroy {
   currentUser$: Observable<User | null>;
-  isUserAdmin$: Observable<boolean> = new Observable<boolean>();
+  sidebarOpen = false;
+  pageTitle = 'Menu';
+  currentUrl = '';
+  private destroy$ = new Subject<void>();
 
   constructor(
-    private cartService: CartService,
     private authService: AuthService,
-    private bottomSheet: MatBottomSheet,
-    private telegramMiniAppService: TelegramMiniAppService
+    private router: Router
   ) {
-    this.cartCount$ = this.cartService.getCartCount();
     this.currentUser$ = this.authService.currentUser$;
   }
 
   ngOnInit(): void {
-    this.telegramMiniAppService.initialize();
+    this.currentUrl = this.router.url;
 
-    // Force re-check of auth state after client hydration
-    // This ensures the UI updates with localStorage data
-    if (this.authService.isLoggedIn() && !this.authService.currentUserValue) {
-      // Token exists but user not loaded - reload from storage
-      this.authService.reloadUserFromStorage();
+    if (this.authService.isLoggedIn()) {
+      this.authService.loadCurrentUser().subscribe();
     }
+
+    this.router.events.pipe(takeUntil(this.destroy$)).subscribe((event) => {
+      if (event instanceof NavigationEnd) {
+        this.currentUrl = event.urlAfterRedirects;
+        // "/products?category=2" is still the Products page: look the title up without the "?..." part.
+        const path = event.urlAfterRedirects.split(/[?#]/)[0];
+        this.pageTitle = ROUTE_TITLES[path] || (path.startsWith('/l/') ? 'Laptop' : 'Menu');
+      }
+    });
   }
 
-  showAdminLink(): boolean {
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  isAdmin(): boolean {
     return this.authService.isAdmin();
   }
 
   logout(): void {
-    this.telegramMiniAppService.notify('warning');
     this.authService.logout();
   }
 
-  openMobileMenu(): void {
-    this.telegramMiniAppService.impact('medium');
-    this.bottomSheet.open(MobileMenuComponent);
+  toggleSidebar(): void {
+    this.sidebarOpen = !this.sidebarOpen;
+  }
+
+  closeSidebar(): void {
+    this.sidebarOpen = false;
+  }
+
+  isAuthPage(): boolean {
+    return this.currentUrl === '/login' || this.currentUrl === '/register';
   }
 }

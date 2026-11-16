@@ -1,0 +1,6 @@
+/* Bars grow in smoothly when the page opens (skipped for people who prefer less motion). */
+.bar-fill { transition: width 400ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bar-fill { transition: none; }
+}

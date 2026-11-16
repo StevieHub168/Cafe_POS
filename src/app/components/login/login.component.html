@@ -1,89 +1,67 @@
-<div class="min-h-screen bg-amber-50 flex items-center justify-center px-4 py-12">
-    <div class="max-w-md w-full">
-        <!-- Logo/Header -->
-        <div class="text-center mb-8">
-            <h1 class="text-4xl font-bold text-amber-900 mb-2">Cafe បង</h1>
-            <p class="text-gray-600" *ngIf="!isTelegramContext">Sign in to your account</p>
+<div class="min-h-screen bg-surface-bg flex items-center justify-center px-4 py-8">
+    <div class="w-full max-w-sm">
+        <div class="mb-5 text-center">
+            <img src="/logo-icon.png" alt="ThaStore logo" class="mx-auto mb-3 h-14 w-14 rounded-full object-cover shadow-md" />
+            <h1 class="text-2xl font-semibold text-gray-900">Sign in</h1>
         </div>
 
-        <!-- Telegram Mini App: no password form, just auto-login or a gate to the web app -->
-        <div *ngIf="isTelegramContext" class="bg-white rounded-lg shadow-lg p-8 text-center">
-            <div *ngIf="isCheckingTelegramAuth">
-                <p class="text-gray-600">Checking your Telegram account...</p>
+        <!-- came from a scanned label: only the code is shown before signing in, the laptop opens after -->
+        <div *ngIf="scannedCode" data-scanned class="mb-4 flex items-center gap-3 rounded-xl border border-surface-border bg-white px-4 py-3">
+            <svg class="h-6 w-6 flex-shrink-0 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path stroke-linecap="round" stroke-linejoin="round" d="M14 14h3v3M21 14v1M14 21h1M17 21h4v-3"/></svg>
+            <div class="min-w-0">
+                <p class="text-xs text-gray-500">You scanned</p>
+                <p class="font-mono text-base font-bold text-gray-900">{{ scannedCode }}</p>
             </div>
-            <div *ngIf="!isCheckingTelegramAuth && telegramAuthFailed">
-                <p class="text-gray-800 font-semibold mb-2">Please continue on the web app</p>
-                <p class="text-gray-500 text-sm mb-6">
-                    This Telegram Mini App is only available to the cafe admin. Everyone else should sign in on the website.
-                </p>
-                <button (click)="openOnWeb()"
-                    class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 px-4 rounded-lg transition duration-300">
-                    Open Web App
+        </div>
+
+        <div class="rounded-xl border border-surface-border bg-white p-6 shadow-card">
+            <div class="mb-5 flex gap-2">
+                <button
+                    *ngFor="let account of testerAccounts"
+                    type="button"
+                    (click)="fillTesterAccount(account.email, account.password)"
+                    class="flex-1 rounded-lg border border-surface-border bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700">
+                    {{ account.label }}
                 </button>
-            </div>
-        </div>
-
-        <!-- Login Form -->
-        <div class="bg-white rounded-lg shadow-lg p-8" *ngIf="!isTelegramContext">
-            <div class="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
-                <p class="text-sm font-semibold text-amber-900">Tester Accounts</p>
-                <div class="mt-3 grid gap-2">
-                    <button
-                        *ngFor="let account of testerAccounts"
-                        type="button"
-                        (click)="fillTesterAccount(account.email, account.password)"
-                        class="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-left text-sm text-gray-700 shadow-sm ring-1 ring-amber-100 transition hover:bg-amber-100">
-                        <span>{{ account.label }}</span>
-                        <span class="text-xs text-gray-500">{{ account.email }}</span>
-                    </button>
-                </div>
             </div>
 
             <form [formGroup]="loginForm" (ngSubmit)="onSubmit()">
-                <!-- Error Message -->
-                <div *ngIf="errorMessage" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                <div *ngIf="errorMessage" class="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
                     {{ errorMessage }}
                 </div>
 
-                <!-- Email Field -->
                 <div class="mb-4">
-                    <label for="email" class="block text-gray-700 font-semibold mb-2">
-                        Email Address
+                    <label for="email" class="mb-2 block text-sm font-medium text-gray-700">
+                        Email
                     </label>
                     <input id="email" type="email" formControlName="email"
-                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                        [class.border-red-500]="emailControl.invalid && emailControl.touched" placeholder="john@example.com">
-                    <div *ngIf="emailControl.invalid && emailControl.touched" class="text-red-500 text-sm mt-1">
+                        class="w-full rounded-lg border border-surface-border px-4 py-2.5 transition focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                        [class.border-red-400]="emailControl.invalid && emailControl.touched" placeholder="Email">
+                    <div *ngIf="emailControl.invalid && emailControl.touched" class="text-red-500 text-xs mt-1">
                         <p *ngIf="emailControl.errors?.['required']">Email is required</p>
                         <p *ngIf="emailControl.errors?.['email']">Please enter a valid email</p>
                     </div>
                 </div>
 
-                <!-- Password Field -->
-                <div class="mb-6">
-                    <label for="password" class="block text-gray-700 font-semibold mb-2">
+                <div class="mb-5">
+                    <label for="password" class="mb-2 block text-sm font-medium text-gray-700">
                         Password
                     </label>
                     <input id="password" type="password" formControlName="password"
-                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                        [class.border-red-500]="passwordControl.invalid && passwordControl.touched" placeholder="••••••••">
-                    <div *ngIf="passwordControl.invalid && passwordControl.touched" class="text-red-500 text-sm mt-1">
+                        class="w-full rounded-lg border border-surface-border px-4 py-2.5 transition focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100"
+                        [class.border-red-400]="passwordControl.invalid && passwordControl.touched" placeholder="Password">
+                    <div *ngIf="passwordControl.invalid && passwordControl.touched" class="text-red-500 text-xs mt-1">
                         <p *ngIf="passwordControl.errors?.['required']">Password is required</p>
                         <p *ngIf="passwordControl.errors?.['minlength']">Password must be at least 6 characters</p>
                     </div>
                 </div>
 
-                <!-- Submit Button -->
                 <button type="submit" [disabled]="isLoading"
-                    class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 px-4 rounded-lg transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed">
+                    class="w-full rounded-lg bg-primary-500 px-4 py-3 font-medium text-white transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-50">
                     <span *ngIf="!isLoading">Sign In</span>
                     <span *ngIf="isLoading">Signing in...</span>
                 </button>
             </form>
-
-            <div class="mt-6 rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-600">
-                Account creation is handled by admin only.
-            </div>
         </div>
     </div>
 </div>

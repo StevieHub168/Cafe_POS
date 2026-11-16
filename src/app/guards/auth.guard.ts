@@ -2,7 +2,7 @@ import { inject } from '@angular/core';
 import { Router, CanActivateFn } from '@angular/router';
 import { AuthService } from '../services/auth.service';
 
-export const authGuard: CanActivateFn = () => {
+export const authGuard: CanActivateFn = (_route, state) => {
     const authService = inject(AuthService);
     const router = inject(Router);
 
@@ -10,6 +10,7 @@ export const authGuard: CanActivateFn = () => {
         return true;
     }
 
-    router.navigate(['/login']);
+    // Remember where the person wanted to go (a scanned laptop, for example): after signing in they land there.
+    router.navigate(['/login'], { queryParams: state?.url && state.url !== '/' ? { returnUrl: state.url } : {} });
     return false;
 };

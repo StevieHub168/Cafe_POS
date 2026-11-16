@@ -1,0 +1,803 @@
+<div class="space-y-6">
+  <app-page-header title="Products">
+    <button type="button" (click)="openLabels()" data-action="labels"
+      class="inline-flex items-center gap-1.5 rounded-lg border border-surface-border bg-white px-3.5 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
+      Print labels
+    </button>
+    <button
+      (click)="openAddProduct()"
+      class="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+    >
+      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+      Add Product
+    </button>
+  </app-page-header>
+
+  <!-- Error -->
+  <div *ngIf="errorMessage" class="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+    <span>{{ errorMessage }}</span>
+    <button (click)="errorMessage = ''" class="text-red-400 hover:text-red-600" aria-label="Dismiss">✕</button>
+  </div>
+
+  <!-- Saved -->
+  <div *ngIf="successMessage" role="status" class="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+    <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+    <span>{{ successMessage }}</span>
+    <!-- After a booking: send the message, or go and see it -->
+    <ng-container *ngIf="savedBooking as booked">
+      <button type="button" (click)="copyBookingDetails(booked)"
+        class="ml-1 rounded-md border border-green-300 bg-white px-2.5 py-1 text-xs font-medium text-green-800 hover:bg-green-100">Copy details</button>
+      <button type="button" (click)="viewBookings()"
+        class="rounded-md px-2.5 py-1 text-xs font-medium text-green-800 underline hover:bg-green-100">View bookings</button>
+    </ng-container>
+  </div>
+
+  <div class="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
+
+    <!-- ============ Categories panel ============ -->
+    <aside class="self-start rounded-lg border border-surface-border bg-white shadow-card">
+      <div class="flex items-center justify-between border-b border-surface-border px-4 py-3">
+        <h2 class="text-sm font-semibold text-gray-900">Categories</h2>
+        <button
+          (click)="openAddCategory()"
+          class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50"
+        >
+          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+          Add
+        </button>
+      </div>
+
+      <ul class="max-h-[28rem] space-y-0.5 overflow-y-auto p-2">
+        <li>
+          <button
+            type="button"
+            (click)="selectCategory(null)"
+            class="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition"
+            [class.bg-primary-50]="selectedCategoryId === null"
+            [class.text-primary-700]="selectedCategoryId === null"
+            [class.font-medium]="selectedCategoryId === null"
+            [class.text-gray-700]="selectedCategoryId !== null"
+            [class.hover:bg-gray-50]="selectedCategoryId !== null"
+          >
+            <span>All products</span>
+            <span class="text-xs tabular-nums text-gray-400">{{ activeProductCount }}</span>
+          </button>
+        </li>
+        <li *ngFor="let category of categories">
+          <!-- The row (name + count + hover icons) has its own wrapper, so the icons stay on this row
+               and do not move when the brand list below opens. -->
+          <div class="group relative">
+          <button
+            type="button"
+            (click)="selectCategory(category.id ?? null)"
+            class="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition"
+            [class.bg-primary-50]="selectedCategoryId === category.id"
+            [class.text-primary-700]="selectedCategoryId === category.id"
+            [class.font-medium]="selectedCategoryId === category.id"
+            [class.text-gray-700]="selectedCategoryId !== category.id"
+            [class.hover:bg-gray-50]="selectedCategoryId !== category.id"
+          >
+            <span class="truncate pr-14">{{ category.name }}</span>
+            <span class="text-xs tabular-nums text-gray-400 group-hover:opacity-0">{{ category.product_count ?? 0 }}</span>
+          </button>
+          <!-- Edit / delete (shown on hover) -->
+          <div class="absolute right-1.5 top-1/2 flex -translate-y-1/2 gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+            <button type="button" (click)="openEditCategory(category, $event)" title="Rename category"
+              class="rounded p-1 text-gray-400 hover:bg-white hover:text-primary-600">
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
+            </button>
+            <button type="button" (click)="deleteCategory(category, $event)" title="Delete category"
+              class="rounded p-1 text-gray-400 hover:bg-white hover:text-red-600">
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
+            </button>
+          </div>
+          </div>
+
+          <!-- Brands of the selected category: filter, rename, delete, and add a new one -->
+          <ul *ngIf="selectedCategoryId === category.id"
+              class="ml-3 mt-0.5 space-y-0.5 border-l border-surface-border pl-2">
+            <li *ngFor="let brand of category.brands ?? []">
+              <div class="group relative">
+                <button
+                  type="button"
+                  (click)="selectBrand(brand)"
+                  class="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm transition"
+                  [class.bg-primary-50]="selectedBrand === brand"
+                  [class.text-primary-700]="selectedBrand === brand"
+                  [class.font-medium]="selectedBrand === brand"
+                  [class.text-gray-600]="selectedBrand !== brand"
+                  [class.hover:bg-gray-50]="selectedBrand !== brand"
+                >
+                  <span class="flex min-w-0 items-center gap-2.5 pr-14">
+                    <!-- every logo gets the same small box, so the names line up -->
+                    <app-brand-logo [brand]="brand" class="h-5 w-8 flex-shrink-0"></app-brand-logo>
+                    <span class="truncate">{{ brand }}</span>
+                  </span>
+                  <span class="text-xs tabular-nums text-gray-400 group-hover:opacity-0">{{ brandCount(category.id, brand) }}</span>
+                </button>
+                <!-- Edit / delete (shown on hover) -->
+                <div class="absolute right-1.5 top-1/2 flex -translate-y-1/2 gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+                  <button type="button" (click)="openEditBrand(category, brand, $event)" title="Rename brand"
+                    class="rounded p-1 text-gray-400 hover:bg-white hover:text-primary-600">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
+                  </button>
+                  <button type="button" (click)="deleteBrand(category, brand, $event)" title="Delete brand"
+                    class="rounded p-1 text-gray-400 hover:bg-white hover:text-red-600">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
+                  </button>
+                </div>
+              </div>
+            </li>
+            <li>
+              <button type="button" (click)="openAddBrand(category)"
+                class="flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-left text-sm font-medium text-primary-600 transition hover:bg-primary-50">
+                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                Add brand
+              </button>
+            </li>
+          </ul>
+        </li>
+        <li *ngIf="categories.length === 0" class="px-3 py-4 text-center text-xs text-gray-400">No categories yet.</li>
+      </ul>
+    </aside>
+
+    <!-- ============ Products ============ -->
+    <section class="min-w-0 space-y-4">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="min-w-0">
+          <h2 class="truncate text-sm font-semibold text-gray-900">
+            {{ selectedCategory ? selectedCategory.name : 'All products' }}<span *ngIf="selectedBrand"> · {{ selectedBrand }}</span>
+            <span class="ml-1 font-normal text-gray-400">({{ filteredProducts.length }})</span>
+          </h2>
+          <p *ngIf="selectedCategoryDescription" class="truncate text-xs text-gray-500">{{ selectedCategoryDescription }}</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="relative w-full sm:w-64">
+            <svg class="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+            </svg>
+            <input
+              type="text"
+              [(ngModel)]="searchQuery"
+              placeholder="Search by name, SKU, brand..."
+              aria-label="Search products"
+              class="w-full rounded-lg border border-surface-border bg-white py-2 pl-8 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100"
+            />
+          </div>
+
+          <!-- Table or cards -->
+          <div class="inline-flex flex-shrink-0 rounded-lg border border-surface-border bg-white p-0.5" role="group" aria-label="Show products as">
+            <button type="button" (click)="setView('table')" [attr.aria-pressed]="viewMode === 'table'" title="Show as a table"
+              class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              [ngClass]="viewMode === 'table' ? 'bg-primary-50 text-primary-700' : 'text-gray-500 hover:text-gray-800'">
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
+              Table
+            </button>
+            <button type="button" (click)="setView('cards')" [attr.aria-pressed]="viewMode === 'cards'" title="Show as cards"
+              class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              [ngClass]="viewMode === 'cards' ? 'bg-primary-50 text-primary-700' : 'text-gray-500 hover:text-gray-800'">
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" /></svg>
+              Cards
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ Table ============ -->
+      <div *ngIf="viewMode === 'table'" class="overflow-hidden rounded-lg border border-surface-border bg-white shadow-card">
+        <div class="overflow-x-auto">
+          <!-- Fixed column widths: the Product column takes whatever is left and cuts long text with "...",
+               so Price, Stock and Edit / Delete are always on screen. On a narrow window the table scrolls
+               sideways and the Edit / Delete column stays pinned on the right. -->
+          <table class="w-full min-w-[48rem] table-fixed text-left text-sm">
+            <thead class="border-b border-surface-border bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+              <tr>
+                <th class="px-3 py-3 font-medium">Product</th>
+                <th class="w-28 px-3 py-3 font-medium">SKU</th>
+                <th class="w-32 px-3 py-3 text-right font-medium">Price</th>
+                <th class="w-44 px-3 py-3 font-medium">Stock</th>
+                <th class="sticky right-0 w-28 bg-gray-50 px-2 py-3"><span class="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-surface-border">
+              <tr *ngFor="let product of filteredProducts" class="bg-white transition hover:bg-gray-50" [class.opacity-60]="product.is_archived">
+                <td class="px-3 py-3">
+                  <div class="flex items-center gap-3">
+                    <div class="relative flex-shrink-0">
+                      <img
+                        *ngIf="product.image_url; else noImg"
+                        [src]="product.image_url | imgSrc"
+                        [alt]="product.name"
+                        class="h-11 w-11 rounded-md object-cover"
+                      />
+                      <ng-template #noImg>
+                        <div class="flex h-11 w-11 items-center justify-center rounded-md bg-gray-100">
+                          <svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5z" />
+                          </svg>
+                        </div>
+                      </ng-template>
+                      <!-- more than one photo: show how many -->
+                      <span *ngIf="(product.images?.length ?? 0) > 1" [title]="product.images?.length + ' photos'"
+                        class="absolute -bottom-1 -right-1 rounded-full bg-gray-800 px-1.5 text-[10px] font-semibold leading-4 text-white">{{ product.images?.length }}</span>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                      <p class="truncate font-medium text-gray-900" [title]="product.name">{{ product.name }}</p>
+                      <p class="truncate text-xs text-gray-400">{{ product.brand || '—' }} {{ product.model || '' }}</p>
+                      <p *ngIf="product.description" class="truncate text-xs text-gray-500" [title]="product.description">{{ oneLine(product.description) }}</p>
+                    </div>
+                  </div>
+                </td>
+                <td class="whitespace-nowrap px-3 py-3 font-mono text-xs text-gray-500">{{ product.sku }}</td>
+                <td class="whitespace-nowrap px-3 py-3 text-right">
+                  <p class="font-medium tabular-nums text-gray-900">${{ (+product.selling_price).toFixed(2) }}</p>
+                </td>
+                <td class="whitespace-nowrap px-3 py-3">
+                  <app-status-badge [tone]="stockInfo(product).tone">{{ stockInfo(product).text }}</app-status-badge>
+                </td>
+                <td class="sticky right-0 whitespace-nowrap bg-inherit px-2 py-3 text-right">
+                  <button (click)="openEditProduct(product)"
+                    class="rounded-md px-2 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50">Edit</button>
+                  <button (click)="deleteProduct(product)"
+                    class="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50">Delete</button>
+                </td>
+              </tr>
+              <tr *ngIf="filteredProducts.length === 0 && !isLoading">
+                <td colspan="5" class="px-4 py-12 text-center text-sm text-gray-400">No products found.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ============ Cards (same look as the Menu, plus Edit / Delete) ============ -->
+      <div *ngIf="viewMode === 'cards'">
+        <!-- 2 cards per row on a phone, 3 on a tablet, 5 on a desktop screen. (The cards are small, so the stock is one short coloured line, not a badge.) -->
+        <div data-card-grid class="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-5">
+          <div *ngFor="let product of filteredProducts" data-card
+            class="flex min-w-0 flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition hover:shadow-md"
+            [class.opacity-60]="product.is_archived">
+            <div class="relative flex h-28 items-center justify-center overflow-hidden bg-gray-100">
+              <img *ngIf="product.image_url; else noCardImg" [src]="product.image_url | imgSrc" [alt]="product.name"
+                class="h-full w-full object-cover" loading="lazy" />
+              <ng-template #noCardImg>
+                <svg class="h-8 w-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5z" />
+                </svg>
+              </ng-template>
+              <span *ngIf="(product.images?.length ?? 0) > 1" class="absolute bottom-1.5 left-1.5 rounded bg-gray-900/60 px-1.5 py-0.5 text-[10px] font-medium text-white">{{ product.images?.length }} photos</span>
+              <div class="absolute right-1.5 top-1.5 rounded-md bg-white/90 px-1.5 py-0.5 text-xs font-bold text-primary-600 shadow-sm backdrop-blur">
+                ${{ (+product.selling_price).toFixed(2) }}
+              </div>
+            </div>
+
+            <div class="flex flex-1 flex-col p-2.5">
+              <h3 class="line-clamp-2 text-sm font-semibold leading-tight text-gray-800" [title]="product.name">{{ product.name }}</h3>
+              <p class="mt-0.5 truncate text-[11px] text-gray-400">{{ product.brand || '—' }} {{ product.model || '' }}</p>
+              <p class="mt-0.5 truncate font-mono text-[10px] text-gray-400">{{ product.sku }}</p>
+              <p *ngIf="product.description" class="mt-1.5 line-clamp-2 whitespace-pre-line text-[11px] leading-snug text-gray-600">{{ product.description }}</p>
+              <!-- Stock: the same words and colours as the table's badge, as one short coloured line -->
+              <p class="mt-auto flex items-center gap-1.5 pt-2 text-[11px] font-medium" [ngClass]="stockTextClass(product)">
+                <span class="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-current"></span>
+                <span class="truncate">{{ stockInfo(product).text }}</span>
+              </p>
+            </div>
+
+            <div class="grid grid-cols-2 border-t border-gray-100 text-xs font-medium">
+              <button type="button" (click)="openEditProduct(product)"
+                class="py-2 text-primary-600 hover:bg-primary-50 focus:outline-none focus-visible:bg-primary-50">Edit</button>
+              <button type="button" (click)="deleteProduct(product)"
+                class="border-l border-gray-100 py-2 text-red-600 hover:bg-red-50 focus:outline-none focus-visible:bg-red-50">Delete</button>
+            </div>
+          </div>
+        </div>
+        <div *ngIf="filteredProducts.length === 0 && !isLoading"
+          class="rounded-lg border border-surface-border bg-white px-4 py-12 text-center text-sm text-gray-400 shadow-card">No products found.</div>
+      </div>
+
+      <!-- Loading skeleton -->
+      <div *ngIf="isLoading" class="space-y-2">
+        <div *ngFor="let i of [1,2,3,4,5]" class="h-14 animate-pulse rounded-lg border border-surface-border bg-white"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ============ Add / Edit Product drawer ============ -->
+<div *ngIf="showProductModal" class="drawer-backdrop fixed inset-0 z-50 flex justify-end bg-gray-900/50" (click)="closeProductModal()">
+  <div class="drawer-panel flex h-full w-full max-w-lg flex-col bg-white shadow-2xl" role="dialog" aria-modal="true"
+       [attr.aria-label]="editingProductId === null ? 'Add product' : 'Edit product'" (click)="$event.stopPropagation()">
+
+    <!-- Header -->
+    <div class="flex flex-shrink-0 items-center justify-between border-b border-surface-border px-5 py-4">
+      <div class="min-w-0">
+        <h2 class="text-base font-semibold text-gray-900">{{ editingProductId === null ? 'Add product' : 'Edit product' }}</h2>
+        <p class="text-xs text-gray-400">
+          <ng-container *ngIf="editingProductId !== null; else autoSku">SKU <span class="font-mono text-gray-500">{{ editingSku }}</span><ng-container *ngIf="editingCode"> · <span class="font-mono text-gray-500" data-edit-code>{{ editingCode }}</span></ng-container></ng-container>
+          <ng-template #autoSku>The SKU is created for you.</ng-template>
+        </p>
+      </div>
+      <div class="flex flex-shrink-0 items-center gap-1">
+        <!-- The QR code of this laptop (to print the labels) -->
+        <button *ngIf="editingCode" type="button" (click)="openQr()" title="The QR code of this laptop" data-action="qr"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-surface-border bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path stroke-linecap="round" stroke-linejoin="round" d="M14 14h3v3M21 14v1M14 21h1M17 21h4v-3"/></svg>
+          QR
+        </button>
+        <!-- A customer wants this laptop: opens the booking form (only for a product that already exists) -->
+        <button *ngIf="editingProductId !== null && !editingIsSold && !editingHold" type="button" (click)="openBooking()" title="A customer wants to book this laptop"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-surface-border bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
+          Book
+        </button>
+        <button type="button" (click)="closeProductModal()" class="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600" aria-label="Close">
+          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
+    </div>
+
+    <form (ngSubmit)="submitProduct()" (keydown.meta.enter)="submitProduct()" (keydown.control.enter)="submitProduct()" class="flex min-h-0 flex-1 flex-col">
+      <div class="flex-1 space-y-5 overflow-y-auto p-5">
+
+        <!-- A laptop that was sold: it can be put back on the Menu -->
+        <div *ngIf="editingIsSold" role="status" class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <span>This laptop was sold. It is hidden from the Menu.</span>
+          <button type="button" (click)="restoreProduct()" [disabled]="isRestoring"
+            class="rounded-md border border-amber-300 bg-white px-2.5 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-60">{{ isRestoring ? 'Please wait...' : 'Put back on the Menu' }}</button>
+        </div>
+
+        <!-- A single laptop that is booked or in repair: it is not on the Menu, and the booking / repair gives it back -->
+        <div *ngIf="editingHold" role="status" data-hold-note
+          class="rounded-lg border px-3 py-2 text-sm" [ngClass]="editingHold === 'booked' ? 'border-sky-200 bg-sky-50 text-sky-800' : 'border-amber-200 bg-amber-50 text-amber-800'">
+          {{ editingHold === 'booked'
+            ? 'This laptop is booked. It is not on the Menu until the booking is picked up or cancelled.'
+            : 'This laptop is in repair. It is back on the Menu when the repair is fixed.' }}
+        </div>
+
+        <!-- 1. Category: one click -->
+        <div>
+          <span class="mb-1.5 block text-xs font-medium text-gray-700">Category <span class="text-red-500">*</span></span>
+          <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Category">
+            <button *ngFor="let c of categories" type="button" role="radio" [attr.aria-checked]="form.category_id === c.id"
+              (click)="selectFormCategory(c.id ?? null)"
+              class="rounded-full border px-4 py-1.5 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-primary-200"
+              [ngClass]="form.category_id === c.id ? 'border-primary-600 bg-primary-600 text-white' : 'border-surface-border bg-white text-gray-700 hover:bg-gray-50'">
+              {{ c.name }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. Brand: one click, or add a new one right here -->
+        <div *ngIf="form.category_id !== null">
+          <span class="mb-1.5 block text-xs font-medium text-gray-700">Brand <span *ngIf="formBrands.length > 1" class="text-red-500">*</span></span>
+
+          <div *ngIf="formBrands.length > 1" class="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Brand">
+            <button *ngFor="let b of formBrands" type="button" role="radio" [attr.aria-checked]="form.brand === b"
+              (click)="selectFormBrand(b)"
+              class="rounded-full border px-3.5 py-1.5 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-primary-200"
+              [ngClass]="form.brand === b ? 'border-primary-600 bg-primary-600 text-white' : 'border-surface-border bg-white text-gray-700 hover:bg-gray-50'">
+              {{ b }}
+            </button>
+
+            <button *ngIf="!addingBrand" type="button" (click)="startAddBrand()"
+              class="rounded-full border border-dashed border-primary-300 px-3.5 py-1.5 text-sm font-medium text-primary-600 transition hover:bg-primary-50">
+              + New brand
+            </button>
+
+            <span *ngIf="addingBrand" class="inline-flex items-center gap-1.5">
+              <input id="new-brand" type="text" [(ngModel)]="newBrandName" [ngModelOptions]="{ standalone: true }" maxlength="100"
+                placeholder="Brand name" aria-label="New brand name" autocomplete="off"
+                (keydown.enter)="$event.preventDefault(); confirmAddBrand()" (keydown.escape)="cancelAddBrand(); $event.stopPropagation()"
+                class="w-36 rounded-full border border-primary-300 px-3.5 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+              <button type="button" (click)="confirmAddBrand()" [disabled]="isAddingBrand"
+                class="rounded-full bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">Add</button>
+              <button type="button" (click)="cancelAddBrand()" aria-label="Cancel new brand"
+                class="rounded-full p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </span>
+          </div>
+          <p *ngIf="newBrandError" class="mt-1.5 text-xs text-red-600">{{ newBrandError }}</p>
+
+          <!-- one brand only (e.g. Mac -> Apple): nothing to choose -->
+          <p *ngIf="formBrands.length === 1" class="text-sm text-gray-600">
+            {{ formBrands[0] }} <span class="text-xs text-gray-400">(automatic)</span>
+          </p>
+
+          <!-- no brand list: free text -->
+          <input *ngIf="formBrands.length === 0" id="p-brand" type="text" [(ngModel)]="form.brand" name="brand" placeholder="Brand (optional)"
+            aria-label="Brand" autocomplete="off"
+            class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+        </div>
+
+        <!-- 3. Name (paste name + specs together and it splits) -->
+        <div>
+          <label for="p-name" class="mb-1.5 block text-xs font-medium text-gray-700">Name <span class="text-red-500">*</span></label>
+          <input id="p-name" type="text" [ngModel]="form.name" (ngModelChange)="onNameChange($event)" (paste)="onNamePaste($event)"
+            name="name" autocomplete="off" [placeholder]="examples.name"
+            class="w-full rounded-lg border border-surface-border px-3 py-2.5 text-base focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+          <!-- <p class="mt-1 text-[11px] text-gray-400">Tip: paste the name and the specs together. The first line becomes the name, the rest the description.</p> -->
+
+          <!-- Suggestion: a similar product you already have -> one click copies it, then change what is different -->
+          <div *ngIf="nameSuggestions.length > 0" class="mt-2 rounded-lg border border-primary-100 bg-primary-50/60 p-2" role="group" aria-label="Similar products you already have">
+            <p class="px-1 pb-1.5 text-[11px] font-medium text-primary-700">You already have similar products. Click one to copy it:</p>
+            <ul class="space-y-1">
+              <li *ngFor="let s of nameSuggestions">
+                <button type="button" (click)="applySuggestion(s)"
+                  class="flex w-full items-center gap-3 rounded-md border border-transparent bg-white px-2 py-1.5 text-left transition hover:border-primary-200 hover:bg-primary-50 focus:outline-none focus:ring-2 focus:ring-primary-200">
+                  <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded bg-gray-100">
+                    <img *ngIf="s.image_url" [src]="s.image_url | imgSrc" alt="" class="h-full w-full object-cover" loading="lazy" />
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate text-sm font-medium text-gray-900">{{ s.name }}</span>
+                    <span class="block truncate text-xs text-gray-500">{{ s.category_name }}<span *ngIf="s.brand"> · {{ s.brand }}</span><span *ngIf="s.description"> · {{ oneLine(s.description) }}</span></span>
+                  </span>
+                  <span class="flex-shrink-0 text-sm font-semibold tabular-nums text-gray-800">${{ (+s.selling_price).toFixed(2) }}</span>
+                </button>
+              </li>
+            </ul>
+          </div>
+
+          <!-- After copying: say what happened, and allow undo -->
+          <div *ngIf="copiedFrom" role="status" class="mt-2 flex items-center justify-between gap-3 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-800">
+            <span>Copied from “{{ copiedFrom }}”. Change anything that is different.</span>
+            <span class="flex flex-shrink-0 items-center gap-2">
+              <button type="button" (click)="undoCopy()" class="font-semibold underline hover:no-underline">Undo</button>
+              <button type="button" (click)="copiedFrom = null" aria-label="Dismiss" class="text-green-600 hover:text-green-800">✕</button>
+            </span>
+          </div>
+        </div>
+
+        <!-- 4. Description -->
+        <div>
+          <label for="p-desc" class="mb-1.5 block text-xs font-medium text-gray-700">Description</label>
+          <textarea #descBox id="p-desc" rows="4" [(ngModel)]="form.description" name="description" maxlength="2000"
+            (focus)="onDescFocus(descBox)" (blur)="onDescBlur()" (input)="updateSpecSuggestions(descBox)"
+            (click)="updateSpecSuggestions(descBox)" (keyup)="updateSpecSuggestions(descBox)"
+            [placeholder]="examples.description"
+            class="w-full resize-y rounded-lg border border-surface-border px-3 py-2 text-sm leading-relaxed focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100"></textarea>
+
+          <!-- Suggestion: specs you have used before (click to add) -->
+          <div *ngIf="descFocused && specSuggestions.length > 0" class="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <span class="text-[11px] text-gray-400">{{ specHint }}</span>
+            <button *ngFor="let spec of specSuggestions" type="button"
+              (mousedown)="$event.preventDefault()" (click)="applySpecSuggestion(spec, descBox)"
+              class="rounded-full border border-surface-border bg-white px-2.5 py-1 text-xs text-gray-700 transition hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700">
+              {{ spec }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 5. Price -->
+        <div>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label for="p-selling" class="mb-1.5 block text-xs font-medium text-gray-700">Price <span class="text-red-500">*</span></label>
+              <div class="relative">
+                <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                <input id="p-selling" type="number" step="0.01" min="0" inputmode="decimal" [(ngModel)]="form.selling_price" name="selling_price" placeholder="0.00"
+                  class="w-full rounded-lg border border-surface-border py-2.5 pl-7 pr-3 text-base focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 6. Photos: big preview + thumbnails. The first photo is the cover. (Dragging files onto it, and pasting, still work.) -->
+        <div>
+          <div class="mb-1.5 flex items-center justify-between">
+            <span class="text-xs font-medium text-gray-700">Photos</span>
+            <span *ngIf="form.images.length > 0" class="text-[11px] text-gray-400">{{ form.images.length }} / {{ maxPhotos }}</span>
+          </div>
+          <div class="rounded-lg border-2 border-dashed p-3 transition"
+            [ngClass]="isDraggingImage ? 'border-primary-400 bg-primary-50' : 'border-surface-border'"
+            (dragover)="onImageDragOver($event)" (dragleave)="isDraggingImage = false" (drop)="onImageDrop($event)">
+
+            <!-- Preview of the chosen photo -->
+            <div class="relative flex h-48 items-center justify-center overflow-hidden rounded-lg bg-gray-50 ring-1 ring-inset ring-surface-border">
+              <img *ngIf="activePhoto; else noPreview" [src]="activePhoto | imgSrc" alt="Photo preview"
+                class="h-full w-full object-contain" (error)="onPreviewError(activePhoto)" />
+              <ng-template #noPreview>
+                <div class="flex flex-col items-center gap-1">
+                  <svg class="h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5z" />
+                  </svg>
+                  <span class="text-xs text-gray-400">No photo yet</span>
+                </div>
+              </ng-template>
+
+              <span *ngIf="activePhoto && activeImage === 0 && form.images.length > 1"
+                class="absolute left-2 top-2 rounded bg-primary-600 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">Cover</span>
+
+              <div *ngIf="isUploading" class="absolute inset-0 flex items-center justify-center bg-white/70">
+                <span class="inline-flex items-center gap-2 text-sm font-medium text-gray-600">
+                  <span class="h-4 w-4 animate-spin rounded-full border-2 border-primary-600 border-t-transparent"></span>
+                  Uploading…<span *ngIf="pendingUploads > 1" class="font-normal text-gray-500">({{ pendingUploads }} left)</span>
+                </span>
+              </div>
+            </div>
+
+            <!-- All photos: click one to see it big; the first one is the cover -->
+            <ul *ngIf="form.images.length > 1" class="mt-3 flex flex-wrap gap-2" aria-label="All photos">
+              <li *ngFor="let photo of form.images; let i = index; trackBy: trackByIndex" class="relative">
+                <button type="button" (click)="selectPhoto(i)" [attr.aria-label]="'Show photo ' + (i + 1)" [attr.aria-current]="i === activeImage ? 'true' : null"
+                  class="block h-14 w-14 overflow-hidden rounded-md border-2 bg-gray-50 transition"
+                  [ngClass]="i === activeImage ? 'border-primary-600' : 'border-transparent hover:border-gray-300'">
+                  <img [src]="photo | imgSrc" [alt]="'Photo ' + (i + 1)" class="h-full w-full object-cover" (error)="onPreviewError(photo)" />
+                </button>
+                <span *ngIf="i === 0" class="pointer-events-none absolute inset-x-0 bottom-0 rounded-b bg-primary-600/90 text-center text-[9px] font-semibold uppercase text-white">Cover</span>
+                <button type="button" (click)="removePhoto(i)" [attr.aria-label]="'Remove photo ' + (i + 1)"
+                  class="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-gray-700 text-[10px] leading-none text-white hover:bg-red-600">✕</button>
+              </li>
+            </ul>
+
+            <!-- Buttons -->
+            <div class="mt-3 flex flex-wrap items-center gap-3">
+              <!-- Phone / tablet only: opens the camera and takes one picture -->
+              <ng-container *ngIf="canTakePhoto">
+                <label for="p-camera"
+                  class="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 focus-within:ring-2 focus-within:ring-primary-100"
+                  [class.cursor-pointer]="canAddPhotos" [class.cursor-not-allowed]="!canAddPhotos" [class.opacity-50]="!canAddPhotos">
+                  <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" /><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" /></svg>
+                  Take photo
+                </label>
+                <input id="p-camera" type="file" accept="image/*" capture="environment" class="sr-only"
+                  [disabled]="!canAddPhotos" (change)="onCameraPhoto($event)" />
+              </ng-container>
+              <label for="p-file"
+                class="inline-flex items-center gap-1.5 rounded-lg border border-surface-border bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-within:ring-2 focus-within:ring-primary-100"
+                [class.cursor-pointer]="canAddPhotos" [class.cursor-not-allowed]="!canAddPhotos" [class.opacity-50]="!canAddPhotos">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                {{ form.images.length > 0 ? 'Add photos' : 'Choose files' }}
+              </label>
+              <input id="p-file" type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" class="sr-only"
+                [disabled]="!canAddPhotos" (change)="onImageSelected($event)" />
+              <button *ngIf="activePhoto && activeImage > 0" type="button" (click)="makeCover(activeImage)" class="text-xs font-medium text-primary-600 hover:underline">Make cover</button>
+              <button *ngIf="activePhoto" type="button" (click)="removePhoto(activeImage)" class="text-xs font-medium text-red-600 hover:underline">Remove photo</button>
+              <span class="ml-auto text-[11px] text-gray-400">PNG, JPG, WEBP or GIF · up to 5 MB each</span>
+            </div>
+            <p *ngIf="uploadError" role="alert" class="mt-2 text-xs text-red-600">{{ uploadError }}</p>
+          </div>
+        </div>
+
+        <!-- 7. Everything optional: other prices, stock tracking, model code -->
+        <div>
+          <button type="button" (click)="showMoreOptions = !showMoreOptions" [attr.aria-expanded]="showMoreOptions"
+            class="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700">
+            <svg class="h-3.5 w-3.5 transition-transform" [class.rotate-90]="showMoreOptions" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+            More options
+            <span *ngIf="!showMoreOptions && form.extra_prices.length > 0"
+              class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">{{ form.extra_prices.length }} other price(s)</span>
+            <span *ngIf="!showMoreOptions && form.track_stock"
+              class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">stock tracking on</span>
+          </button>
+          <div *ngIf="showMoreOptions" class="mt-3 space-y-4">
+          <div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-medium text-gray-700">Other prices <span class="font-normal text-gray-400">(optional)</span></span>
+              <button type="button" (click)="addExtraPrice()" [disabled]="form.extra_prices.length >= 10"
+                class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 disabled:opacity-40">
+                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                Add price
+              </button>
+            </div>
+            <p *ngIf="form.extra_prices.length === 0" class="mt-1 text-[11px] text-gray-400">{{ examples.priceHint }}</p>
+            <div *ngFor="let row of form.extra_prices; let i = index; trackBy: trackByIndex" class="mt-2 flex items-center gap-2">
+              <input #labelBox type="text" [id]="'xp-label-' + i" [(ngModel)]="row.label" [ngModelOptions]="{ standalone: true }" maxlength="50"
+                [placeholder]="examples.label" [attr.aria-label]="'Label for price ' + (i + 1)" autocomplete="off"
+                (focus)="onLabelFocus(i, labelBox.value)" (blur)="onLabelBlur()" (input)="onLabelInput(i, labelBox.value)"
+                class="min-w-0 flex-1 rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+              <div class="relative w-28 flex-shrink-0">
+                <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">$</span>
+                <input type="number" step="0.01" min="0" inputmode="decimal" [id]="'xp-price-' + i" [(ngModel)]="row.price" [ngModelOptions]="{ standalone: true }"
+                  placeholder="0.00" [attr.aria-label]="'Amount for price ' + (i + 1)"
+                  class="w-full rounded-lg border border-surface-border py-2 pl-6 pr-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+              </div>
+              <button type="button" (click)="removeExtraPrice(i)" title="Remove this price" aria-label="Remove this price"
+                class="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600">
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <!-- Suggestion: labels used on other products before (click to use) -->
+            <div *ngIf="activeLabelRow !== null && labelSuggestions.length > 0" class="mt-2 flex flex-wrap items-center gap-1.5">
+              <span class="text-[11px] text-gray-400">Used before:</span>
+              <button *ngFor="let label of labelSuggestions" type="button"
+                (mousedown)="$event.preventDefault()" (click)="applyLabelSuggestion(label)"
+                class="rounded-full border border-surface-border bg-white px-2.5 py-1 text-xs text-gray-700 transition hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700">
+                {{ label }}
+              </button>
+            </div>
+          </div>
+
+            <!-- Stock: off = a single item -->
+        <div class="rounded-lg border border-surface-border p-3">
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <p id="track-stock-label" class="text-xs font-medium text-gray-700">Track stock</p>
+              <p class="text-[11px] text-gray-400">
+                {{ form.track_stock ? 'Count how many you have and get a low-stock alert.' : 'Off: this product is a single item (stock 1).' }}
+              </p>
+            </div>
+            <button type="button" role="switch" [attr.aria-checked]="form.track_stock" aria-labelledby="track-stock-label"
+              (click)="setTrackStock(!form.track_stock)"
+              class="relative inline-flex h-6 w-11 flex-shrink-0 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-200"
+              [class.bg-primary-600]="form.track_stock" [class.bg-gray-300]="!form.track_stock">
+              <span class="pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform"
+                [class.translate-x-5]="form.track_stock"></span>
+            </button>
+          </div>
+
+          <div class="mt-3 grid grid-cols-2 gap-4">
+            <div>
+              <label for="p-stock" class="mb-1 block text-xs font-medium text-gray-700">Stock</label>
+              <input id="p-stock" type="number" min="0" step="1" inputmode="numeric" [(ngModel)]="form.stock_quantity" name="stock_quantity" [disabled]="!form.track_stock"
+                class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400" />
+            </div>
+            <div>
+              <label for="p-min" class="mb-1 block text-xs font-medium text-gray-700">Min stock</label>
+              <input id="p-min" type="number" min="0" step="1" inputmode="numeric" [(ngModel)]="form.min_stock_level" name="min_stock_level" [disabled]="!form.track_stock"
+                class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400" />
+            </div>
+          </div>
+        </div>
+
+            <div>
+              <label for="p-model" class="mb-1 block text-xs font-medium text-gray-700">Model code</label>
+            <input id="p-model" type="text" [(ngModel)]="form.model" name="model" [placeholder]="examples.model" autocomplete="off"
+              class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer: always visible, so errors and the Save buttons never scroll away -->
+      <div class="flex flex-shrink-0 flex-col gap-2 border-t border-surface-border bg-white px-5 py-3">
+        <p *ngIf="formError" role="alert" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{{ formError }}</p>
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <button type="button" (click)="closeProductModal()"
+            class="rounded-lg border border-surface-border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+          <button *ngIf="editingProductId === null" type="button" (click)="submitProduct(true)" [disabled]="isSubmitting || isUploading"
+            class="rounded-lg border border-primary-300 px-4 py-2 text-sm font-medium text-primary-700 hover:bg-primary-50 disabled:opacity-50">
+            Save &amp; add another
+          </button>
+          <button type="submit" [disabled]="isSubmitting || isUploading"
+            class="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+            {{ isSubmitting ? 'Saving...' : (editingProductId === null ? 'Save product' : 'Save changes') }}
+          </button>
+        </div>
+        <p class="text-right text-[11px] text-gray-400">Tip: Ctrl/⌘ + Enter saves.</p>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ Add / Edit Category dialog ============ -->
+<div *ngIf="showCategoryModal" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4" (click)="closeCategoryModal()">
+  <div class="w-full max-w-md rounded-xl bg-white shadow-xl" (click)="$event.stopPropagation()">
+    <div class="flex items-center justify-between border-b border-surface-border px-5 py-4">
+      <h2 class="text-base font-semibold text-gray-900">{{ editingCategoryId === null ? 'Add Category' : 'Edit Category' }}</h2>
+      <button (click)="closeCategoryModal()" class="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600" aria-label="Close">
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+      </button>
+    </div>
+
+    <form (ngSubmit)="submitCategory()" class="space-y-4 p-5">
+      <div *ngIf="categoryFormError" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{{ categoryFormError }}</div>
+
+      <div>
+        <label for="c-name" class="mb-1 block text-xs font-medium text-gray-700">Name <span class="text-red-500">*</span></label>
+        <input id="c-name" type="text" [(ngModel)]="categoryForm.name" name="cname" placeholder="Category name"
+          class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+      </div>
+      <div>
+        <label for="c-desc" class="mb-1 block text-xs font-medium text-gray-700">Description</label>
+        <input id="c-desc" type="text" [(ngModel)]="categoryForm.description" name="cdescription" placeholder="Optional"
+          class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" (click)="closeCategoryModal()"
+          class="rounded-lg border border-surface-border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+        <button type="submit" [disabled]="isSubmittingCategory"
+          class="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+          {{ isSubmittingCategory ? 'Saving...' : (editingCategoryId === null ? 'Save Category' : 'Save Changes') }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ Add / Rename Brand dialog ============ -->
+<div *ngIf="showBrandModal" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4" (click)="closeBrandModal()">
+  <div class="w-full max-w-md rounded-xl bg-white shadow-xl" (click)="$event.stopPropagation()">
+    <div class="flex items-center justify-between border-b border-surface-border px-5 py-4">
+      <h2 class="text-base font-semibold text-gray-900">
+        {{ editingBrand === null ? 'Add brand' : 'Rename brand' }}
+        <span class="font-normal text-gray-400">· {{ brandCategory?.name }}</span>
+      </h2>
+      <button (click)="closeBrandModal()" class="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600" aria-label="Close">
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+      </button>
+    </div>
+
+    <form (ngSubmit)="submitBrand()" class="space-y-4 p-5">
+      <div *ngIf="brandFormError" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{{ brandFormError }}</div>
+
+      <div>
+        <label for="b-name" class="mb-1 block text-xs font-medium text-gray-700">Brand name <span class="text-red-500">*</span></label>
+        <input id="b-name" type="text" [(ngModel)]="brandName" name="bname" placeholder="Brand name" maxlength="100"
+          class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+        <p *ngIf="editingBrand !== null" class="mt-1 text-[11px] text-gray-400">Products with this brand are renamed too.</p>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" (click)="closeBrandModal()"
+          class="rounded-lg border border-surface-border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+        <button type="submit" [disabled]="isSubmittingBrand"
+          class="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+          {{ isSubmittingBrand ? 'Saving...' : (editingBrand === null ? 'Save Brand' : 'Save Changes') }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ The QR code of a laptop: a side panel ============ -->
+<app-laptop-qr-drawer *ngIf="qrFor as qr" [product]="qr.product" [justSaved]="qr.justSaved" (closed)="closeQr()"></app-laptop-qr-drawer>
+
+<!-- ============ Book this laptop (a customer reserves it): a side panel, on top of the Edit drawer ============ -->
+<div *ngIf="bookingProduct as bookable" class="booking-backdrop fixed inset-0 z-[55] flex justify-end bg-gray-900/50" (click)="closeBooking()">
+  <div class="booking-panel flex h-full w-full max-w-lg flex-col bg-white shadow-2xl"
+       role="dialog" aria-modal="true" aria-label="Book this laptop" (click)="$event.stopPropagation()">
+    <div class="flex flex-shrink-0 items-center justify-between gap-3 border-b border-surface-border px-5 py-4">
+      <div class="min-w-0">
+        <h2 class="text-base font-semibold text-gray-900">Book this laptop</h2>
+        <p class="truncate text-xs text-gray-500">{{ bookable.name }}</p>
+      </div>
+      <button type="button" (click)="closeBooking()" class="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600" aria-label="Close">
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+      </button>
+    </div>
+    <app-booking-form [product]="bookable" [products]="products" [today]="today"
+      (saved)="onBookingSaved($event)" (cancelled)="closeBooking()"></app-booking-form>
+  </div>
+</div>
+
+<!-- ============ Delete confirmation (product, category or brand) ============ -->
+<div *ngIf="deleteRequest as req" class="confirm-backdrop fixed inset-0 z-[60] flex items-center justify-center bg-gray-900/50 p-4" (click)="cancelDelete()">
+  <div class="confirm-panel w-full max-w-sm rounded-xl bg-white p-5 shadow-2xl" role="alertdialog" aria-modal="true"
+       aria-labelledby="delete-title" aria-describedby="delete-text" (click)="$event.stopPropagation()">
+
+    <div class="flex items-start gap-3">
+      <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600">
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
+      </div>
+      <div class="min-w-0">
+        <h2 id="delete-title" class="text-base font-semibold text-gray-900">{{ req.title }}</h2>
+        <p id="delete-text" class="mt-0.5 text-sm text-gray-500">This can't be undone.</p>
+      </div>
+    </div>
+
+    <!-- What is going to be deleted -->
+    <div class="mt-4 flex items-center gap-3 rounded-lg border border-surface-border bg-gray-50 p-3">
+      <img *ngIf="req.image" [src]="req.image | imgSrc" alt="" class="h-11 w-11 flex-shrink-0 rounded-md object-cover" />
+      <div class="min-w-0">
+        <p class="truncate text-sm font-medium text-gray-900" [title]="req.name">{{ req.name }}</p>
+        <p *ngIf="req.detail" class="truncate text-xs text-gray-500">{{ req.detail }}</p>
+      </div>
+    </div>
+
+    <p *ngIf="req.warning" class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ req.warning }}</p>
+    <p *ngIf="deleteError" role="alert" class="mt-3 text-sm text-red-600">{{ deleteError }}</p>
+
+    <div class="mt-5 flex justify-end gap-2">
+      <!-- Cancel has the focus when this opens, so a stray Enter never deletes anything -->
+      <button id="delete-cancel" type="button" (click)="cancelDelete()" [disabled]="isDeleting"
+        class="rounded-lg border border-surface-border bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:opacity-50">Cancel</button>
+      <button type="button" (click)="confirmDeleteNow()" [disabled]="isDeleting"
+        class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2 disabled:opacity-60">
+        {{ isDeleting ? 'Deleting...' : req.confirmLabel }}
+      </button>
+    </div>
+  </div>
+</div>
