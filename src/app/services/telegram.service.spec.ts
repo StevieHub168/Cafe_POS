@@ -1,8 +1,7 @@
 import { TestBed } from '@angular/core/testing';
-import { HttpHeaders, provideHttpClient } from '@angular/common/http';
+import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TelegramService } from './telegram.service';
-import { AuthService } from './auth.service';
 import { environment } from '../../environments/environment';
 
 describe('TelegramService', () => {
@@ -11,23 +10,19 @@ describe('TelegramService', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [
-        provideHttpClient(), provideHttpClientTesting(),
-        { provide: AuthService, useValue: { getAuthHeaders: () => new HttpHeaders({ Authorization: 'Bearer test-token' }) } },
-      ],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
     });
     http = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => http.verify());
 
-  it('send posts the kind and the id, with the login, and gives back the answer', () => {
+  it('send posts the kind and the id, and gives back the answer', () => {
     let got: unknown;
     TestBed.inject(TelegramService).send('booking', 5).subscribe(answer => (got = answer));
     const request = http.expectOne(url);
     expect(request.request.method).toBe('POST');
     expect(request.request.body).toEqual({ kind: 'booking', id: 5 });
-    expect(request.request.headers.get('Authorization')).toBe('Bearer test-token');
     request.flush({ sent: true, group: 'booking', withoutPhotos: false });
     expect(got).toEqual({ sent: true, group: 'booking', withoutPhotos: false });
   });

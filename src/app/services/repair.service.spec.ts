@@ -1,14 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import { HttpHeaders } from '@angular/common/http';
 import { RepairService } from './repair.service';
 import { BookingService } from './booking.service';
-import { AuthService } from './auth.service';
 import { environment } from '../../environments/environment';
 import { RepairInput } from '../models/repair.model';
 
-const AUTH = new HttpHeaders({ Authorization: 'Bearer test-token' });
 const INPUT: RepairInput = {
   product_id: null, device: 'Dell Inspiron 15', customer_name: null, phone: null, telegram: null, problem: 'Screen flickers',
   received_date: '2026-11-10', back_on: null, cost: null, status: 'received', sale_invoice_id: null,
@@ -19,7 +16,7 @@ describe('RepairService and the booking pickup call', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting(), { provide: AuthService, useValue: { getAuthHeaders: () => AUTH } }],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
     });
     http = TestBed.inject(HttpTestingController);
   });
@@ -29,12 +26,11 @@ describe('RepairService and the booking pickup call', () => {
   describe('repairs', () => {
     const url = `${environment.apiUrl}/repairs`;
 
-    it('getRepairs asks for the list, with the login', () => {
+    it('getRepairs asks for the list', () => {
       let got: unknown;
       TestBed.inject(RepairService).getRepairs().subscribe(list => (got = list));
       const request = http.expectOne(url);
       expect(request.request.method).toBe('GET');
-      expect(request.request.headers.get('Authorization')).toBe('Bearer test-token');
       request.flush([{ id: 1 }]);
       expect(got).toEqual([{ id: 1 }]);
     });
@@ -44,7 +40,6 @@ describe('RepairService and the booking pickup call', () => {
       const request = http.expectOne(url);
       expect(request.request.method).toBe('POST');
       expect(request.request.body).toEqual(INPUT);
-      expect(request.request.headers.get('Authorization')).toBe('Bearer test-token');
       request.flush({ id: 1 });
     });
 
@@ -60,7 +55,6 @@ describe('RepairService and the booking pickup call', () => {
       TestBed.inject(RepairService).deleteRepair(5).subscribe();
       const request = http.expectOne(`${url}/5`);
       expect(request.request.method).toBe('DELETE');
-      expect(request.request.headers.get('Authorization')).toBe('Bearer test-token');
       request.flush({ message: 'ok' });
     });
 
@@ -79,7 +73,6 @@ describe('RepairService and the booking pickup call', () => {
       const request = http.expectOne(`${environment.apiUrl}/bookings/3/pickup`);
       expect(request.request.method).toBe('POST');
       expect(request.request.body).toEqual({ warranty: '1_week', customer_name: 'Sok', phone: '011', telegram: null });
-      expect(request.request.headers.get('Authorization')).toBe('Bearer test-token');
       request.flush({ booking: { id: 3 }, invoice: { id: 9 }, laptop: 'hidden' });
       expect(result.laptop).toBe('hidden');
     });

@@ -1,6 +1,6 @@
 import { AfterViewInit, Component, ElementRef, EventEmitter, Input, Output, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ImgSrcPipe } from '../../pipes/img-src.pipe';
+import { ImgSrcPipe } from '../../../pipes/img-src.pipe';
 
 /**
  * "Are you sure?" box for deleting something. Same look as the one on the Products page.

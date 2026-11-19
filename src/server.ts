@@ -27,13 +27,23 @@ const angularApp = new AngularNodeAppEngine();
  */
 
 /**
+ * Angular names its scripts and styles after their content (main-ABC123XY.js), so a file never changes under its name: the browser
+ * may keep it for a year. Everything else (the icons and logos of public/) CAN change under the same name, so the browser asks
+ * again each time: a cheap check that answers "unchanged" when it is the same. (With one year for everything, a browser that once
+ * saved the old tab icon kept showing it.)
+ */
+const CONTENT_NAMED = /-[A-Z0-9]{8}\.(js|css)$/;
+
+/**
  * Serve static files from /browser
  */
 app.use(
   express.static(browserDistFolder, {
-    maxAge: '1y',
     index: false,
     redirect: false,
+    setHeaders: (res, filePath) => {
+      res.setHeader('Cache-Control', CONTENT_NAMED.test(filePath) ? 'public, max-age=31536000, immutable' : 'no-cache');
+    },
   }),
 );
 

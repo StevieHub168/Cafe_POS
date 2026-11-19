@@ -1,6 +1,6 @@
 import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ImgSrcPipe } from '../../pipes/img-src.pipe';
+import { ImgSrcPipe } from '../../../pipes/img-src.pipe';
 
 /**
  * The photos of a booking or a repair as small squares on its card. Click one to see it big (it opens in a new tab).

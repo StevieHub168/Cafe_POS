@@ -133,7 +133,7 @@
             </li>
           </ul>
         </li>
-        <li *ngIf="categories.length === 0" class="px-3 py-4 text-center text-xs text-gray-400">No categories yet.</li>
+        <li *ngIf="categoriesLoaded && categories.length === 0" class="px-3 py-4 text-center text-xs text-gray-400">No categories yet.</li>
       </ul>
     </aside>
 
@@ -155,6 +155,7 @@
             <input
               type="text"
               [(ngModel)]="searchQuery"
+              (ngModelChange)="onSearch()"
               placeholder="Search by name, SKU, brand..."
               aria-label="Search products"
               class="w-full rounded-lg border border-surface-border bg-white py-2 pl-8 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100"
@@ -180,7 +181,8 @@
       </div>
 
       <!-- ============ Table ============ -->
-      <div *ngIf="viewMode === 'table'" class="overflow-hidden rounded-lg border border-surface-border bg-white shadow-card">
+      <app-skeleton *ngIf="isLoading && viewMode === 'table'" kind="table" [count]="8"></app-skeleton>
+      <div *ngIf="!isLoading && viewMode === 'table'" class="overflow-hidden rounded-lg border border-surface-border bg-white shadow-card">
         <div class="overflow-x-auto">
           <!-- Fixed column widths: the Product column takes whatever is left and cuts long text with "...",
                so Price, Stock and Edit / Delete are always on screen. On a narrow window the table scrolls
@@ -196,7 +198,7 @@
               </tr>
             </thead>
             <tbody class="divide-y divide-surface-border">
-              <tr *ngFor="let product of filteredProducts" class="bg-white transition hover:bg-gray-50" [class.opacity-60]="product.is_archived">
+              <tr *ngFor="let product of pagedProducts" class="bg-white transition hover:bg-gray-50" [class.opacity-60]="product.is_archived">
                 <td class="px-3 py-3">
                   <div class="flex items-center gap-3">
                     <div class="relative flex-shrink-0">
@@ -247,10 +249,11 @@
       </div>
 
       <!-- ============ Cards (same look as the Menu, plus Edit / Delete) ============ -->
-      <div *ngIf="viewMode === 'cards'">
+      <app-skeleton *ngIf="isLoading && viewMode === 'cards'" kind="product-cards" [dense]="true" [count]="10"></app-skeleton>
+      <div *ngIf="!isLoading && viewMode === 'cards'">
         <!-- 2 cards per row on a phone, 3 on a tablet, 5 on a desktop screen. (The cards are small, so the stock is one short coloured line, not a badge.) -->
         <div data-card-grid class="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-5">
-          <div *ngFor="let product of filteredProducts" data-card
+          <div *ngFor="let product of pagedProducts" data-card
             class="flex min-w-0 flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition hover:shadow-md"
             [class.opacity-60]="product.is_archived">
             <div class="relative flex h-28 items-center justify-center overflow-hidden bg-gray-100">
@@ -291,10 +294,9 @@
           class="rounded-lg border border-surface-border bg-white px-4 py-12 text-center text-sm text-gray-400 shadow-card">No products found.</div>
       </div>
 
-      <!-- Loading skeleton -->
-      <div *ngIf="isLoading" class="space-y-2">
-        <div *ngFor="let i of [1,2,3,4,5]" class="h-14 animate-pulse rounded-lg border border-surface-border bg-white"></div>
-      </div>
+      <!-- The pages: Showing 1-20 of 134, Per page, Previous / numbers / Next -->
+      <app-pagination *ngIf="!isLoading && filteredProducts.length > 0" [page]="currentPage" [perPage]="perPage" [total]="filteredProducts.length"
+        (pageChange)="goToPage($event)" (perPageChange)="changePageSize($event)"></app-pagination>
     </section>
   </div>
 </div>

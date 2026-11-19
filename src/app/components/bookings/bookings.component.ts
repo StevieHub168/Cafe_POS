@@ -1,26 +1,30 @@
-import { Component, HostListener, OnInit, ViewChild } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { finalize } from 'rxjs';
+import { Subscription, finalize } from 'rxjs';
 import { BookingService } from '../../services/booking.service';
 import { ProductService } from '../../services/product.service';
 import { InvoiceService } from '../../services/invoice.service';
 import { BOOKING_STATUSES, Booking, BookingStatus, PickupResult, statusOf } from '../../models/booking.model';
 import { Product } from '../../models/product.model';
+import { BookingCounts } from '../../models/paged.model';
 import { Invoice, formatInvoiceNumber } from '../../models/invoice.model';
-import { PageHeaderComponent } from '../ui/page-header.component';
-import { StatusBadgeComponent } from '../ui/status-badge.component';
-import { ConfirmDialogComponent } from '../ui/confirm-dialog.component';
-import { AskDialogComponent } from '../ui/ask-dialog.component';
+import { PageHeaderComponent } from '../ui/page-header/page-header.component';
+import { PaginationComponent } from '../ui/pagination/pagination.component';
+import { SkeletonComponent } from '../ui/skeleton/skeleton.component';
+import { StatusBadgeComponent } from '../ui/status-badge/status-badge.component';
+import { ConfirmDialogComponent } from '../ui/confirm-dialog/confirm-dialog.component';
+import { AskDialogComponent } from '../ui/ask-dialog/ask-dialog.component';
 import { BookingFormComponent, BookingSaved } from './booking-form.component';
 import { BookingPickupComponent } from './booking-pickup.component';
 import { InvoiceEditorComponent } from '../invoices/invoice-editor.component';
 import { InvoiceViewerComponent } from '../invoices/invoice-viewer.component';
 import { InvoiceSaved } from '../invoices/invoice-form.component';
-import { PhotoStripComponent } from '../ui/photo-strip.component';
+import { PhotoStripComponent } from '../ui/photo-strip/photo-strip.component';
 import { ImgSrcPipe } from '../../pipes/img-src.pipe';
 import { ScanActionService } from '../../services/scan-action.service';
 import { daysFromToday, formatDate, todayIso, weekdayName } from '../../utils/dates';
+import { PageState, pageAfterShrink } from '../../utils/page-state';
 import { formatMoney } from '../../utils/money';
 import { invoicePrefillFromBooking } from '../../utils/invoice-prefill';
 import { gaveBackNote, holdChangeNote } from '../../utils/stock-notes';
@@ -28,19 +32,30 @@ import { TelegramNotifier } from '../../services/telegram-notifier.service';
 
 type Filter = BookingStatus | 'all';
 
+/** How long after the last key the search is sent (so a word being typed is one request, not one per letter). */
+const SEARCH_DELAY_MS = 300;
+
 @Component({
   selector: 'app-bookings',
   standalone: true,
-  imports: [CommonModule, FormsModule, PageHeaderComponent, StatusBadgeComponent, ConfirmDialogComponent, AskDialogComponent, BookingFormComponent, BookingPickupComponent, InvoiceEditorComponent, InvoiceViewerComponent, PhotoStripComponent, ImgSrcPipe],
+  imports: [CommonModule, FormsModule, PageHeaderComponent, StatusBadgeComponent, ConfirmDialogComponent, AskDialogComponent, BookingFormComponent, BookingPickupComponent, InvoiceEditorComponent, InvoiceViewerComponent, PhotoStripComponent, SkeletonComponent, PaginationComponent, ImgSrcPipe],
   templateUrl: './bookings.component.html',
   styleUrl: './bookings.component.css'
 })
-export class BookingsComponent implements OnInit {
+export class BookingsComponent implements OnInit, OnDestroy {
+  /** The bookings of the page on screen (the API sends one page, already narrowed by the tab and the search). */
   bookings: Booking[] = [];
+  /** Where the list is: which page, how many on a page, how many bookings match in all. */
+  readonly paging = new PageState(10);
+  /** How many bookings are in each status (not narrowed by the search): the numbers of the tabs. null until the first answer. */
+  counts: BookingCounts | null = null;
   /** Catalogue products: only used to suggest names / prices while a booking is typed. */
   products: Product[] = [];
+  /** The grey shapes are shown: the first load, and every new page, tab or search. (After an action the list is read again quietly.) */
   isLoading = true;
   errorMessage = '';
+  private loading?: Subscription;
+  private searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   // Notice after an action (saved, cancelled...).
   successMessage = '';
@@ -87,7 +102,7 @@ export class BookingsComponent implements OnInit {
   ) { }
 
   ngOnInit(): void {
-    this.loadBookings();
+    this.loadBookings(true);
     this.loadInvoices();
     this.loadProducts();
   }
@@ -124,12 +139,33 @@ export class BookingsComponent implements OnInit {
 
   // ---------- list ----------
 
-  loadBookings(): void {
-    this.bookingService.getBookings().subscribe({
-      next: (bookings) => {
-        // Once the customer picked the laptop up, it is a Sale: it is not kept in the list of bookings. (The record stays behind
-        // the scenes, so the Sale and the Telegram clean-up can still find it.)
-        this.bookings = bookings.filter(b => b.status !== 'picked_up');
+  ngOnDestroy(): void {
+    clearTimeout(this.searchTimer);
+    clearTimeout(this.successTimer);
+    this.loading?.unsubscribe();
+  }
+
+  /**
+   * Reads the page on screen again. `withShapes`: show the grey shapes meanwhile (a new page, tab or search).
+   * Once the customer picked the laptop up, it is a Sale: "All" leaves the picked-up ones out. (The record stays behind
+   * the scenes, so the Sale and the Telegram clean-up can still find it.)
+   */
+  loadBookings(withShapes = false): void {
+    if (withShapes) this.isLoading = true;
+    this.loading?.unsubscribe();       // a slow answer to an older question must never replace a newer one
+    const tab = this.statusFilter === 'all' ? { excludeStatus: 'picked_up' } : { status: this.statusFilter };
+    this.loading = this.bookingService.getBookingPage(this.paging, { ...tab, search: this.searchQuery }).subscribe({
+      next: (answer) => {
+        // The last booking of this page is gone: go back to the last page that has bookings.
+        const back = pageAfterShrink(this.paging.page, answer);
+        if (back !== null) {
+          this.paging.page = back;
+          this.loadBookings(withShapes);
+          return;
+        }
+        this.bookings = answer.results;
+        this.paging.take(answer);
+        this.counts = answer.meta?.counts ?? this.counts;
         this.isLoading = false;
         this.runScanAction();
       },
@@ -140,30 +176,52 @@ export class BookingsComponent implements OnInit {
     });
   }
 
-  /** "Customer is here" on a scanned laptop sent us here: the pickup window of that booking opens by itself. */
+  /** A tab: the first page of that tab. */
+  setFilter(filter: Filter): void {
+    if (this.statusFilter === filter) return;
+    this.statusFilter = filter;
+    this.paging.first();
+    this.loadBookings(true);
+  }
+
+  /** Something was typed in the search box: it is sent when the typing stops. */
+  onSearch(): void {
+    clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => {
+      this.paging.first();
+      this.loadBookings(true);
+    }, SEARCH_DELAY_MS);
+  }
+
+  goToPage(page: number): void {
+    this.paging.page = page;
+    this.loadBookings(true);
+  }
+
+  changePageSize(size: number): void {
+    this.paging.perPage = size;
+    this.paging.first();
+    this.loadBookings(true);
+  }
+
+  /**
+   * "Customer is here" on a scanned laptop sent us here: the pickup window of that booking opens by itself.
+   * The booking is asked for by its number: it may be on another page (or in another tab) than the one on screen.
+   */
   private runScanAction(): void {
     const action = this.scanActions.takePickup();
     if (!action) return;
-    const booking = this.bookings.find(b => b.id === action.bookingId && b.status === 'booked');
-    if (booking) this.startPickup(booking);
-    else this.errorMessage = 'That booking is not waiting for pickup any more.';
-  }
-
-  countFor(filter: Filter): number {
-    return filter === 'all' ? this.bookings.length : this.bookings.filter(b => b.status === filter).length;
-  }
-
-  get visibleBookings(): Booking[] {
-    const q = this.searchQuery.trim().toLowerCase();
-    const digits = q.replace(/\D/g, '');
-    return this.bookings.filter(b => {
-      if (this.statusFilter !== 'all' && b.status !== this.statusFilter) return false;
-      if (!q) return true;
-      return b.product_name.toLowerCase().includes(q)
-        || (b.telegram ?? '').toLowerCase().includes(q)
-        || (b.phone ?? '').toLowerCase().includes(q)
-        || (digits.length >= 3 && (b.phone ?? '').replace(/\D/g, '').includes(digits));
+    const notWaiting = () => (this.errorMessage = 'That booking is not waiting for pickup any more.');
+    this.bookingService.getBooking(action.bookingId).subscribe({
+      next: (booking) => (booking.status === 'booked' ? this.startPickup(booking) : notWaiting()),
+      error: notWaiting
     });
+  }
+
+  /** How many bookings are in a tab (the API counts them: it knows them all, the page only has a few). "All" leaves out the picked-up ones. */
+  countFor(filter: Filter): number {
+    if (!this.counts) return 0;
+    return filter === 'all' ? this.counts.booked + this.counts.cancelled : this.counts[filter];
   }
 
   trackById = (_: number, booking: Booking) => booking.id;
@@ -276,7 +334,7 @@ export class BookingsComponent implements OnInit {
 
   /** Bookings still waiting for the customer. */
   get waitingForPickup(): number {
-    return this.bookings.filter(b => b.status === 'booked').length;
+    return this.counts?.booked ?? 0;
   }
 
   // ---------- the customer picks the laptop up (the booking becomes a Sale) ----------

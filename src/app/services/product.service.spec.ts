@@ -2,9 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ProductService } from './product.service';
-import { AuthService } from './auth.service';
 import { environment } from '../../environments/environment';
-import { HttpHeaders } from '@angular/common/http';
 
 describe('ProductService.getProductByCode', () => {
   let service: ProductService;
@@ -12,10 +10,7 @@ describe('ProductService.getProductByCode', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [
-        provideHttpClient(), provideHttpClientTesting(),
-        { provide: AuthService, useValue: { getAuthHeaders: () => new HttpHeaders({ Authorization: 'Bearer t' }) } },
-      ],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
     });
     service = TestBed.inject(ProductService);
     http = TestBed.inject(HttpTestingController);
@@ -23,12 +18,11 @@ describe('ProductService.getProductByCode', () => {
 
   afterEach(() => http.verify());
 
-  it('asks the API for the laptop of the code, signed in', () => {
+  it('asks the API for the laptop of the code', () => {
     let got: unknown;
     service.getProductByCode('LP-0042').subscribe(p => (got = p));
     const req = http.expectOne(`${environment.apiUrl}/products/by-code/LP-0042`);
     expect(req.request.method).toBe('GET');
-    expect(req.request.headers.get('Authorization')).toBe('Bearer t');
     req.flush({ id: 42, code: 'LP-0042' });
     expect(got).toEqual({ id: 42, code: 'LP-0042' });
   });

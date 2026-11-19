@@ -1,9 +1,9 @@
 import { Component, EventEmitter, HostListener, Input, OnDestroy, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { catchError, concatMap, finalize, from, map, of } from 'rxjs';
-import { ProductService } from '../../services/product.service';
-import { ImgSrcPipe } from '../../pipes/img-src.pipe';
-import { shrinkPhoto } from '../../utils/shrink-photo';
+import { ProductService } from '../../../services/product.service';
+import { ImgSrcPipe } from '../../../pipes/img-src.pipe';
+import { shrinkPhoto } from '../../../utils/shrink-photo';
 
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;

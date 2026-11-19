@@ -1,4 +1,4 @@
-import { StatusTone } from '../components/ui/status-badge.component';
+import { StatusTone } from '../components/ui/status-badge/status-badge.component';
 import { Invoice, Warranty } from './invoice.model';
 
 export type BookingStatus = 'booked' | 'picked_up' | 'cancelled';

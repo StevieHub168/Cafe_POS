@@ -1,11 +1,11 @@
 import { Injectable, PLATFORM_ID, Inject } from '@angular/core';
-import { isPlatformBrowser } from '@angular/common';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { isPlatformBrowser, Location } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
 import { tap, catchError, map } from 'rxjs/operators';
 import { Router } from '@angular/router';
 import { environment } from '../../environments/environment';
-import { User, AuthResponse, LoginRequest, RegisterRequest } from '../models/user.model';
+import { User, AuthResponse, CreatedUser, LoginRequest, RegisterRequest } from '../models/user.model';
 
 @Injectable({
     providedIn: 'root'
@@ -22,15 +22,15 @@ export class AuthService {
     constructor(
         private http: HttpClient,
         private router: Router,
+        private location: Location,
         @Inject(PLATFORM_ID) private platformId: Object
     ) {
         this.isBrowser = isPlatformBrowser(this.platformId);
     }
 
-    createUser(data: RegisterRequest): Observable<User> {
-        return this.http.post<User>(`${this.API_URL}/auth/register`, data, {
-            headers: this.getAuthHeaders()
-        }).pipe(
+    /** Admin only: adds a member. Does NOT sign them in here (the answer holds their token, and it is left alone). */
+    createUser(data: RegisterRequest): Observable<CreatedUser> {
+        return this.http.post<CreatedUser>(`${this.API_URL}/auth/register`, data).pipe(
             catchError(this.handleError)
         );
     }
@@ -47,14 +47,33 @@ export class AuthService {
     }
 
     /**
-     * Logout user
+     * Logout user. The server is told first, so the token stops working there too (not only in this browser).
+     * The person is signed out here even when that call fails (offline, token already out of date).
      */
     logout(): void {
-        if (this.isBrowser) {
+        const token = this.getToken();
+        if (this.isBrowser && token) {
+            this.http.post(`${this.API_URL}/auth/logout`, {}, { headers: { Authorization: `Bearer ${token}` } }).subscribe({ error: () => { } });
             localStorage.removeItem(this.TOKEN_KEY);
         }
         this.currentUserSubject.next(null);
         this.router.navigate(['/login']);
+    }
+
+    /**
+     * The API no longer accepts `failedToken` (it ran out, or the person signed in on another device): sign out here, without
+     * telling the server, and go to the Login page, which brings the person back to this page after signing in.
+     * Nothing happens when that token is not the current one (several calls fail together, or the person already signed in again).
+     */
+    sessionEnded(failedToken: string): void {
+        if (!this.isBrowser || this.getToken() !== failedToken) return;
+        localStorage.removeItem(this.TOKEN_KEY);
+        this.currentUserSubject.next(null);
+
+        // While the app is starting the router has not finished its first navigation (its url is still "/"): the address bar knows the page.
+        const page = this.router.url === '/' ? this.location.path() : this.router.url;
+        const comeBack = page && page !== '/' && !page.startsWith('/login');
+        this.router.navigate(['/login'], { queryParams: comeBack ? { returnUrl: page } : {} });
     }
 
     /**
@@ -89,21 +108,8 @@ export class AuthService {
         return localStorage.getItem(this.TOKEN_KEY);
     }
 
-    /**
-     * Get HTTP headers with auth token
-     */
-    getAuthHeaders(): HttpHeaders {
-        const token = this.getToken();
-        return new HttpHeaders({
-            'Content-Type': 'application/json',
-            'Authorization': token ? `Bearer ${token}` : ''
-        });
-    }
-
     getMe(): Observable<User> {
-        return this.http.get<{ user: User }>(`${this.API_URL}/auth/me`, {
-            headers: this.getAuthHeaders()
-        }).pipe(
+        return this.http.get<{ user: User }>(`${this.API_URL}/auth/me`).pipe(
             map((response) => response.user),
             catchError(this.handleError)
         );
@@ -118,7 +124,9 @@ export class AuthService {
         return this.getMe().pipe(
             tap((user) => this.currentUserSubject.next(user)),
             catchError(() => {
-                this.logout();
+                // A 401 was already handled (sessionEnded: the token is gone, and Login knows the page to come back to).
+                // Anything else (the API cannot be reached): sign out as before.
+                if (this.getToken()) this.logout();
                 return of(null);
             })
         );

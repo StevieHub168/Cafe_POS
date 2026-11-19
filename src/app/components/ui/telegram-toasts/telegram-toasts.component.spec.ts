@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { TelegramToastsComponent } from './telegram-toasts.component';
-import { TelegramNotifier, TelegramToast } from '../../services/telegram-notifier.service';
+import { TelegramNotifier, TelegramToast } from '../../../services/telegram-notifier.service';
 
 describe('TelegramToastsComponent (the little box in the corner)', () => {
   let fixture: ComponentFixture<TelegramToastsComponent>;

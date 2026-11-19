@@ -110,3 +110,47 @@ html {
     zoom: 0.9448;   /* 592 px -> 148 mm */
   }
 }
+
+/* Changing page (the browser's view transition, switched on in app.config.ts). On a phone the old page fades down a little and the
+   new one slides up with a small bounce. A bigger screen keeps the browser's soft cross-fade. Same look as the CDC app. */
+@media (max-width: 959px) {
+  ::view-transition-old(root) {
+    animation: route-slide-out 0.5s ease-out both;
+  }
+  ::view-transition-new(root) {
+    animation: route-slide-in-bottom 0.6s linear(0, 0.01, 0.05 2%, 0.22 5%, 0.85 15%, 1.08 22%, 1.15 28%, 1.12 35%, 1.05 45%, 1.01 55%, 1) both;
+  }
+}
+@keyframes route-slide-out {
+  to {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+}
+@keyframes route-slide-in-bottom {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+/* Someone who asked their phone for less motion gets the page change at once, with no movement. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+/* A panel that slides in from the right edge (Add member). Bookings and Products keep their own copy of the same rules. */
+.drawer-backdrop { animation: drawer-fade 150ms ease-out; }
+.drawer-panel    { animation: drawer-slide 220ms cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes drawer-fade  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes drawer-slide { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .drawer-backdrop, .drawer-panel { animation: none; }
+}

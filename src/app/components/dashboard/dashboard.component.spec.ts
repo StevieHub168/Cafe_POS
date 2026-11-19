@@ -123,6 +123,7 @@ describe('DashboardComponent', () => {
     products.getAllProducts.and.returnValue(waiting);
     await create();
     expect(dom().querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(dom().querySelectorAll('[data-skeleton][data-kind="stats"] [data-skeleton-item]').length).toBe(5);
 
     waiting.next(PRODUCTS);
     waiting.complete();

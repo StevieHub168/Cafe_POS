@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import { LabelsComponent } from './labels.component';
 import { ProductService } from '../../services/product.service';
 import { ConfigService } from '../../services/config.service';
@@ -44,6 +44,19 @@ describe('LabelsComponent (Print labels)', () => {
   const printButton = () => dom().querySelector('[data-action="print"]') as HTMLButtonElement;
   const box = (code: string) => dom().querySelector(`input[data-code="${code}"]`) as HTMLInputElement;
   const sheet = () => new DOMParser().parseFromString((dom().querySelector('iframe') as HTMLIFrameElement).srcdoc, 'text/html');
+
+  it('while the laptops load it shows grey rows (no "Loading..." text), then the laptops', async () => {
+    const pending = new Subject<Product[]>();
+    await open({}, { url: 'https://thastore.example', fromSettings: true }, pending);
+    expect(dom().querySelectorAll('[data-skeleton][data-kind="rows"] [data-skeleton-item]').length).toBe(5);
+    expect(text()).not.toContain('Loading...');
+    expect(text()).not.toContain('There are no laptops yet.');
+    pending.next(PRODUCTS);
+    pending.complete();
+    fixture.detectChanges();
+    expect(dom().querySelector('[data-skeleton]')).toBeNull();
+    expect(dom().querySelectorAll('fieldset label').length).toBe(2);
+  });
 
   it('lists the laptops that have a code, A-Z, with the code beside the name (the specs under them have the whole width)', async () => {
     await open();

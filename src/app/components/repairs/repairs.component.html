@@ -19,8 +19,9 @@
     <span>{{ successMessage }}</span>
   </div>
 
-  <!-- The numbers -->
-  <div class="grid grid-cols-1 gap-3 sm:grid-cols-2" data-summary>
+  <!-- The numbers (grey shapes until the API has counted) -->
+  <app-skeleton *ngIf="!counts && isLoading" kind="stats" [count]="2"></app-skeleton>
+  <div *ngIf="counts" class="grid grid-cols-1 gap-3 sm:grid-cols-2" data-summary>
     <div class="rounded-xl border border-surface-border bg-white px-4 py-3.5"><p class="text-xs text-gray-500">In the shop now</p><p class="mt-0.5 text-2xl font-bold tabular-nums text-gray-900" data-in-shop>{{ inShop }}</p></div>
     <div class="rounded-xl border bg-white px-4 py-3.5" [ngClass]="waitingForPickup > 0 ? 'border-amber-200' : 'border-surface-border'"><p class="text-xs text-gray-500">Fixed, waiting for pickup</p><p class="mt-0.5 text-2xl font-bold tabular-nums text-gray-900" data-waiting>{{ waitingForPickup }}</p></div>
   </div>
@@ -28,7 +29,7 @@
   <!-- Step tabs + search -->
   <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
     <div class="flex gap-2 overflow-x-auto pb-1 hide-scrollbar" role="group" aria-label="Show repairs">
-      <button *ngFor="let tab of tabs" type="button" (click)="statusFilter = tab.value" [attr.aria-pressed]="statusFilter === tab.value"
+      <button *ngFor="let tab of tabs" type="button" (click)="setFilter(tab.value)" [attr.aria-pressed]="statusFilter === tab.value"
         class="whitespace-nowrap rounded-full border px-3.5 py-1.5 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
         [ngClass]="statusFilter === tab.value ? 'border-primary-600 bg-primary-600 text-white' : 'border-surface-border bg-white text-gray-700 hover:bg-gray-50'">
         {{ tab.label }}<span class="ml-1.5 text-xs tabular-nums opacity-70">{{ countFor(tab.value) }}</span>
@@ -38,19 +39,17 @@
       <svg class="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
       </svg>
-      <input type="text" [(ngModel)]="searchQuery" placeholder="Search device, customer, problem..." aria-label="Search repairs"
+      <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="onSearch()" placeholder="Search device, customer, problem..." aria-label="Search repairs"
         class="w-full rounded-lg border border-surface-border bg-white py-2 pl-8 pr-3 text-sm text-gray-700 placeholder:text-gray-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
     </div>
   </div>
 
-  <!-- Loading -->
-  <div *ngIf="isLoading" class="grid grid-cols-1 gap-4 xl:grid-cols-2">
-    <div *ngFor="let i of [1,2,3,4]" class="h-60 animate-pulse rounded-xl border border-gray-100 bg-white"></div>
-  </div>
+  <!-- Loading: grey shapes the size of the cards -->
+  <app-skeleton *ngIf="isLoading" kind="cards" [count]="4"></app-skeleton>
 
   <!-- Repairs: one card each, two per row on a wide screen -->
-  <div *ngIf="!isLoading && visibleRepairs.length > 0" class="grid grid-cols-1 gap-4 xl:grid-cols-2">
-    <article *ngFor="let repair of visibleRepairs; trackBy: trackById" data-repair
+  <div *ngIf="!isLoading && repairs.length > 0" class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+    <article *ngFor="let repair of repairs; trackBy: trackById" data-repair
       class="flex flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition hover:shadow-md">
 
       <!-- The laptop, the customer, the step -->
@@ -122,9 +121,13 @@
     </article>
   </div>
 
+  <!-- The pages: Showing 1-10 of 25, Per page, Previous / numbers / Next -->
+  <app-pagination *ngIf="!isLoading && repairs.length > 0" [page]="paging.page" [perPage]="paging.perPage" [total]="paging.total"
+    (pageChange)="goToPage($event)" (perPageChange)="changePageSize($event)"></app-pagination>
+
   <!-- Nothing to show -->
-  <div *ngIf="!isLoading && visibleRepairs.length === 0" class="rounded-lg border border-surface-border bg-white px-4 py-12 text-center shadow-card">
-    <ng-container *ngIf="repairs.length === 0; else noMatch">
+  <div *ngIf="!isLoading && counts && repairs.length === 0" class="rounded-lg border border-surface-border bg-white px-4 py-12 text-center shadow-card">
+    <ng-container *ngIf="countFor('all') === 0; else noMatch">
       <p class="text-base font-medium text-gray-700">No repairs yet.</p>
       <p class="mt-1 text-sm text-gray-500">Click <span class="font-medium text-gray-600">New repair</span> when a laptop comes in.</p>
     </ng-container>

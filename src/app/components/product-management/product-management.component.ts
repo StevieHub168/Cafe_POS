@@ -9,9 +9,11 @@ import { ExtraPrice, Product } from '../../models/product.model';
 import { Category } from '../../models/category.model';
 import { StockInfo, stockInfo } from '../../models/stock-status';
 import { Booking } from '../../models/booking.model';
-import { PageHeaderComponent } from '../ui/page-header.component';
-import { StatusBadgeComponent } from '../ui/status-badge.component';
-import { BrandLogoComponent } from '../ui/brand-logo.component';
+import { PageHeaderComponent } from '../ui/page-header/page-header.component';
+import { PaginationComponent } from '../ui/pagination/pagination.component';
+import { SkeletonComponent } from '../ui/skeleton/skeleton.component';
+import { StatusBadgeComponent } from '../ui/status-badge/status-badge.component';
+import { BrandLogoComponent } from '../ui/brand-logo/brand-logo.component';
 import { BookingFormComponent, BookingSaved } from '../bookings/booking-form.component';
 import { LaptopQrDrawerComponent } from '../qr/laptop-qr-drawer.component';
 import { ImgSrcPipe } from '../../pipes/img-src.pipe';
@@ -79,15 +81,21 @@ const VIEW_KEY = 'products_view';
 @Component({
   selector: 'app-product-management',
   standalone: true,
-  imports: [CommonModule, FormsModule, PageHeaderComponent, StatusBadgeComponent, BrandLogoComponent, BookingFormComponent, LaptopQrDrawerComponent, ImgSrcPipe],
+  imports: [CommonModule, FormsModule, PageHeaderComponent, PaginationComponent, SkeletonComponent, StatusBadgeComponent, BrandLogoComponent, BookingFormComponent, LaptopQrDrawerComponent, ImgSrcPipe],
   templateUrl: './product-management.component.html',
   styleUrl: './product-management.component.css'
 })
 export class ProductManagementComponent implements OnInit {
   products: Product[] = [];
   categories: Category[] = [];
+  /** False until the categories have come (or failed): "No categories yet." must not flash while they load. */
+  categoriesLoaded = false;
+  /** True while the grey shapes are shown (the first load). A reload after a save is quiet: the list stays on screen. */
   isLoading = true;
   searchQuery = '';
+  /** The page on screen and how many products it holds. The whole list is already here, so the pages are cut in the browser. */
+  page = 1;
+  perPage = 20;
   selectedCategoryId: number | null = null;
   selectedBrand: string | null = null;
   errorMessage = '';
@@ -186,7 +194,7 @@ export class ProductManagementComponent implements OnInit {
     });
 
     this.loadCategories();
-    this.loadProducts();
+    this.loadProducts(true);
   }
 
   /** Esc closes whichever dialog / drawer is open. */
@@ -259,18 +267,23 @@ export class ProductManagementComponent implements OnInit {
     this.categoryService.getCategories().subscribe({
       next: (categories) => {
         this.categories = categories;
+        this.categoriesLoaded = true;
         // If the selected category was deleted, fall back to "All".
         if (this.selectedCategoryId !== null && !categories.some(c => c.id === this.selectedCategoryId)) {
           this.selectedCategoryId = null;
           this.selectedBrand = null;
         }
       },
-      error: (err) => (this.errorMessage = this.messageFrom(err, 'Failed to load categories'))
+      error: (err) => {
+        this.errorMessage = this.messageFrom(err, 'Failed to load categories');
+        this.categoriesLoaded = true;
+      }
     });
   }
 
-  loadProducts(): void {
-    this.isLoading = true;
+  /** `withShapes`: show the grey shapes meanwhile (the first load). */
+  loadProducts(withShapes = false): void {
+    if (withShapes) this.isLoading = true;
     this.productService.getAllProducts(true).subscribe({
       next: (products) => {
         this.products = products;
@@ -366,6 +379,33 @@ export class ProductManagementComponent implements OnInit {
     });
   }
 
+  // ---------- the pages (cut in the browser: the whole list is here anyway, for the brand counts and the drawer) ----------
+
+  /** The page on screen. A page past the last one (after a delete or a new search) shows the last one. */
+  get currentPage(): number {
+    return Math.min(this.page, Math.max(1, Math.ceil(this.filteredProducts.length / this.perPage)));
+  }
+
+  /** Only the products of the page on screen (the table and the cards show these). */
+  get pagedProducts(): Product[] {
+    const start = (this.currentPage - 1) * this.perPage;
+    return this.filteredProducts.slice(start, start + this.perPage);
+  }
+
+  goToPage(page: number): void {
+    this.page = page;
+  }
+
+  changePageSize(size: number): void {
+    this.perPage = size;
+    this.page = 1;
+  }
+
+  /** Something was typed in the search box: the first page of what matches. */
+  onSearch(): void {
+    this.page = 1;
+  }
+
   /** The code ("LP-0042") of the laptop being edited ('' = none yet / a new laptop). */
   get editingCode(): string {
     return this.editingProductId === null ? '' : this.products.find(x => x.id === this.editingProductId)?.code ?? '';
@@ -420,10 +460,12 @@ export class ProductManagementComponent implements OnInit {
   selectCategory(id: number | null): void {
     this.selectedCategoryId = id;
     this.selectedBrand = null;
+    this.page = 1;
   }
 
   selectBrand(brand: string | null): void {
     this.selectedBrand = this.selectedBrand === brand ? null : brand;
+    this.page = 1;
   }
 
   brandCount(categoryId: number | undefined, brand: string): number {

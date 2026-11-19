@@ -4,14 +4,15 @@ import { RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import { ProductService } from '../../services/product.service';
 import { CategoryService } from '../../services/category.service';
-import { PageHeaderComponent } from '../ui/page-header.component';
-import { StatCardComponent } from '../ui/stat-card.component';
+import { PageHeaderComponent } from '../ui/page-header/page-header.component';
+import { SkeletonComponent } from '../ui/skeleton/skeleton.component';
+import { StatCardComponent } from '../ui/stat-card/stat-card.component';
 import { computeStats, DashboardStats } from './dashboard-stats';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, PageHeaderComponent, StatCardComponent],
+  imports: [CommonModule, RouterLink, PageHeaderComponent, SkeletonComponent, StatCardComponent],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.css'
 })

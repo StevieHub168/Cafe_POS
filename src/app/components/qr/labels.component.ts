@@ -3,7 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { PageHeaderComponent } from '../ui/page-header.component';
+import { PageHeaderComponent } from '../ui/page-header/page-header.component';
+import { SkeletonComponent } from '../ui/skeleton/skeleton.component';
 import { Product } from '../../models/product.model';
 import { ProductService } from '../../services/product.service';
 import { ConfigService } from '../../services/config.service';
@@ -25,7 +26,7 @@ const PREVIEW_WIDTH = 497;    // widest the preview of an A4 sheet gets (desktop
 @Component({
   selector: 'app-labels',
   standalone: true,
-  imports: [CommonModule, FormsModule, PageHeaderComponent, ImgSrcPipe],
+  imports: [CommonModule, FormsModule, PageHeaderComponent, SkeletonComponent, ImgSrcPipe],
   template: `
     <!-- room at the bottom of a phone for the Print bar -->
     <div class="space-y-5 pb-20 lg:pb-0">
@@ -53,7 +54,7 @@ const PREVIEW_WIDTH = 497;    // widest the preview of an A4 sheet gets (desktop
                 <button type="button" (click)="pickNone()" class="py-1.5 hover:underline">Pick none</button>
               </div>
             </div>
-            <p *ngIf="isLoading" class="text-sm text-gray-500">Loading...</p>
+            <app-skeleton *ngIf="isLoading" kind="rows" [count]="5"></app-skeleton>
             <p *ngIf="!isLoading && laptops.length === 0" class="text-sm text-gray-500">There are no laptops yet.</p>
             <!-- Each laptop with its photo and specs: two laptops can have the same name -->
             <div class="max-h-[22rem] space-y-1.5 overflow-y-auto pr-1 sm:max-h-[26rem]">

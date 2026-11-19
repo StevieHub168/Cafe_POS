@@ -1,8 +1,7 @@
 import { TestBed } from '@angular/core/testing';
-import { HttpHeaders, provideHttpClient } from '@angular/common/http';
+import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ConfigService } from './config.service';
-import { AuthService } from './auth.service';
 import { environment } from '../../environments/environment';
 
 describe('ConfigService (the address the QR codes open)', () => {
@@ -12,10 +11,7 @@ describe('ConfigService (the address the QR codes open)', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [
-        provideHttpClient(), provideHttpClientTesting(),
-        { provide: AuthService, useValue: { getAuthHeaders: () => new HttpHeaders({ Authorization: 'Bearer test-token' }) } },
-      ],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
     });
     http = TestBed.inject(HttpTestingController);
     service = TestBed.inject(ConfigService);
@@ -23,11 +19,10 @@ describe('ConfigService (the address the QR codes open)', () => {
 
   afterEach(() => http.verify());
 
-  it('asks the API for the shop address, with the login', () => {
+  it('asks the API for the shop address', () => {
     let got = '';
     service.publicUrl().subscribe(v => (got = v));
     const request = http.expectOne(url);
-    expect(request.request.headers.get('Authorization')).toBe('Bearer test-token');
     request.flush({ publicUrl: 'https://thastore.example' });
     expect(got).toBe('https://thastore.example');
   });

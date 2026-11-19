@@ -1,0 +1,51 @@
+<form (ngSubmit)="submit()" (keydown.meta.enter)="submit()" (keydown.control.enter)="submit()" novalidate class="flex min-h-0 flex-1 flex-col">
+  <div class="flex-1 space-y-5 overflow-y-auto p-5">
+
+    <div>
+      <label for="m-name" class="mb-1 block text-xs font-medium text-gray-700">Name</label>
+      <input id="m-name" type="text" name="full_name" [(ngModel)]="form.full_name" maxlength="100" autocomplete="off" placeholder="Sok Dara"
+        class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+    </div>
+
+    <div>
+      <label for="m-email" class="mb-1 block text-xs font-medium text-gray-700">Email <span class="text-red-500">*</span></label>
+      <input id="m-email" type="email" name="email" [(ngModel)]="form.email" maxlength="100" inputmode="email" autocomplete="off" autocapitalize="off" spellcheck="false"
+        placeholder="name@shop.com"
+        class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+      <p class="mt-1 text-[11px] text-gray-500">They sign in with this email.</p>
+    </div>
+
+    <div>
+      <span class="mb-1.5 block text-xs font-medium text-gray-700">Role</span>
+      <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Role">
+        <button *ngFor="let role of roles" type="button" role="radio" [attr.aria-checked]="form.role === role.value" (click)="form.role = role.value"
+          class="rounded-full border px-4 py-1.5 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-primary-200"
+          [ngClass]="form.role === role.value ? 'border-primary-600 bg-primary-600 text-white' : 'border-surface-border bg-white text-gray-700 hover:bg-gray-50'">
+          {{ role.label }}
+        </button>
+      </div>
+      <p class="mt-1.5 text-[11px] text-gray-500" data-role-note>{{ roleNote }}</p>
+    </div>
+
+    <div>
+      <label for="m-password" class="mb-1 block text-xs font-medium text-gray-700">Password <span class="text-red-500">*</span></label>
+      <!-- Shown as text on purpose (like "Reset password"): you write it for someone else and tell it to them. -->
+      <input id="m-password" type="text" name="password" [(ngModel)]="form.password" maxlength="72" autocomplete="off" autocapitalize="off" spellcheck="false"
+        [placeholder]="'At least ' + minPassword + ' characters'"
+        class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+    </div>
+  </div>
+
+  <!-- Footer: the message is here (not at the top) so it is always in view -->
+  <div class="flex-shrink-0 border-t border-surface-border bg-white px-5 py-3">
+    <p *ngIf="formError" role="alert" class="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600" data-form-error>{{ formError }}</p>
+    <div class="flex justify-end gap-2">
+      <button type="button" (click)="cancel()" [disabled]="isSaving"
+        class="rounded-lg border border-surface-border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
+      <button type="submit" [disabled]="isSaving"
+        class="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-60">
+        {{ isSaving ? 'Adding...' : 'Add member' }}
+      </button>
+    </div>
+  </div>
+</form>

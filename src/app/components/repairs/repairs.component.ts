@@ -1,17 +1,20 @@
-import { Component, HostListener, OnInit } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { finalize } from 'rxjs';
+import { Subscription, finalize } from 'rxjs';
 import { RepairService } from '../../services/repair.service';
 import { InvoiceService } from '../../services/invoice.service';
 import { ProductService } from '../../services/product.service';
 import { REPAIR_STEPS, Repair, RepairStatus, nextRepairStatus, repairStep, repairStepIndex } from '../../models/repair.model';
 import { Invoice, formatInvoiceNumber } from '../../models/invoice.model';
 import { Product } from '../../models/product.model';
-import { PageHeaderComponent } from '../ui/page-header.component';
-import { StatusBadgeComponent } from '../ui/status-badge.component';
-import { ConfirmDialogComponent } from '../ui/confirm-dialog.component';
-import { PhotoStripComponent } from '../ui/photo-strip.component';
+import { RepairCounts } from '../../models/paged.model';
+import { PageHeaderComponent } from '../ui/page-header/page-header.component';
+import { PaginationComponent } from '../ui/pagination/pagination.component';
+import { SkeletonComponent } from '../ui/skeleton/skeleton.component';
+import { StatusBadgeComponent } from '../ui/status-badge/status-badge.component';
+import { ConfirmDialogComponent } from '../ui/confirm-dialog/confirm-dialog.component';
+import { PhotoStripComponent } from '../ui/photo-strip/photo-strip.component';
 import { InvoiceEditorComponent } from '../invoices/invoice-editor.component';
 import { InvoiceViewerComponent } from '../invoices/invoice-viewer.component';
 import { InvoiceSaved } from '../invoices/invoice-form.component';
@@ -21,11 +24,15 @@ import { invoicePrefillFromRepair } from '../../utils/invoice-prefill';
 import { productCover } from '../../utils/invoice-photo';
 import { warrantyText } from '../../utils/warranty';
 import { daysFromToday, formatDate, todayIso } from '../../utils/dates';
+import { PageState, pageAfterShrink } from '../../utils/page-state';
 import { formatMoney } from '../../utils/money';
 import { gaveBackNote, holdChangeNote } from '../../utils/stock-notes';
 import { TelegramNotifier } from '../../services/telegram-notifier.service';
 
 type Filter = RepairStatus | 'all';
+
+/** The search is sent when the typing stops. */
+const SEARCH_DELAY_MS = 300;
 
 /**
  * The Repairs page: every repair job as a card with its 3 steps (Received -> Fixed -> Picked up). The main button moves
@@ -34,17 +41,23 @@ type Filter = RepairStatus | 'all';
 @Component({
   selector: 'app-repairs',
   standalone: true,
-  imports: [CommonModule, FormsModule, PageHeaderComponent, StatusBadgeComponent, ConfirmDialogComponent, RepairFormComponent, InvoiceEditorComponent, InvoiceViewerComponent, PhotoStripComponent, ImgSrcPipe],
+  imports: [CommonModule, FormsModule, PageHeaderComponent, PaginationComponent, SkeletonComponent, StatusBadgeComponent, ConfirmDialogComponent, RepairFormComponent, InvoiceEditorComponent, InvoiceViewerComponent, PhotoStripComponent, ImgSrcPipe],
   templateUrl: './repairs.component.html'
 })
-export class RepairsComponent implements OnInit {
+export class RepairsComponent implements OnInit, OnDestroy {
+  /** The repairs of the page on screen (the API sends a few at a time). */
   repairs: Repair[] = [];
+  readonly paging = new PageState(10);
+  /** How many repairs are in each step, counted by the API for all of them (null until the first answer). */
+  counts: RepairCounts | null = null;
   /** The shop's laptops (to pick one for a new repair, and for the photo of a repair). */
   products: Product[] = [];
   /** The shop's Sales: a repair of a laptop we sold says "warranty ...". */
   sales: Invoice[] = [];
   isLoading = true;
   errorMessage = '';
+  private loading?: Subscription;
+  private searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   successMessage = '';
   private successTimer: ReturnType<typeof setTimeout> | undefined;
@@ -78,9 +91,15 @@ export class RepairsComponent implements OnInit {
   ) { }
 
   ngOnInit(): void {
-    this.loadRepairs();
+    this.loadRepairs(true);
     this.loadInvoices();
     this.loadProducts();
+  }
+
+  ngOnDestroy(): void {
+    clearTimeout(this.searchTimer);
+    clearTimeout(this.successTimer);
+    this.loading?.unsubscribe();
   }
 
   /** Only for the form and the photos: if this fails, repairs still work. Read again after a repair changes stock. */
@@ -108,10 +127,23 @@ export class RepairsComponent implements OnInit {
 
   // ---------- list ----------
 
-  loadRepairs(): void {
-    this.repairService.getRepairs().subscribe({
-      next: (repairs) => {
-        this.repairs = repairs;
+  /** Reads the page on screen again. `withShapes`: show the grey shapes meanwhile (a new page, tab or search). */
+  loadRepairs(withShapes = false): void {
+    if (withShapes) this.isLoading = true;
+    this.loading?.unsubscribe();       // a slow answer to an older question must never replace a newer one
+    const tab = this.statusFilter === 'all' ? {} : { status: this.statusFilter };
+    this.loading = this.repairService.getRepairPage(this.paging, { ...tab, search: this.searchQuery }).subscribe({
+      next: (answer) => {
+        // The last repair of this page is gone: go back to the last page that has repairs.
+        const back = pageAfterShrink(this.paging.page, answer);
+        if (back !== null) {
+          this.paging.page = back;
+          this.loadRepairs(withShapes);
+          return;
+        }
+        this.repairs = answer.results;
+        this.paging.take(answer);
+        this.counts = answer.meta?.counts ?? this.counts;
         this.isLoading = false;
       },
       error: (err) => {
@@ -119,6 +151,34 @@ export class RepairsComponent implements OnInit {
         this.isLoading = false;
       }
     });
+  }
+
+  /** A tab: the first page of that tab. */
+  setFilter(filter: Filter): void {
+    if (this.statusFilter === filter) return;
+    this.statusFilter = filter;
+    this.paging.first();
+    this.loadRepairs(true);
+  }
+
+  /** Something was typed in the search box: it is sent when the typing stops. */
+  onSearch(): void {
+    clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => {
+      this.paging.first();
+      this.loadRepairs(true);
+    }, SEARCH_DELAY_MS);
+  }
+
+  goToPage(page: number): void {
+    this.paging.page = page;
+    this.loadRepairs(true);
+  }
+
+  changePageSize(size: number): void {
+    this.paging.perPage = size;
+    this.paging.first();
+    this.loadRepairs(true);
   }
 
   private loadInvoices(): void {
@@ -132,23 +192,10 @@ export class RepairsComponent implements OnInit {
     });
   }
 
+  /** How many repairs are in a tab (the API counts them: it knows them all, the page only has a few). */
   countFor(filter: Filter): number {
-    return filter === 'all' ? this.repairs.length : this.repairs.filter(r => r.status === filter).length;
-  }
-
-  get visibleRepairs(): Repair[] {
-    const q = this.searchQuery.trim().toLowerCase();
-    const digits = q.replace(/\D/g, '');
-    return this.repairs.filter(r => {
-      if (this.statusFilter !== 'all' && r.status !== this.statusFilter) return false;
-      if (!q) return true;
-      return r.device.toLowerCase().includes(q)
-        || r.problem.toLowerCase().includes(q)
-        || (r.customer_name ?? '').toLowerCase().includes(q)
-        || (r.telegram ?? '').toLowerCase().includes(q)
-        || (r.phone ?? '').toLowerCase().includes(q)
-        || (digits.length >= 3 && (r.phone ?? '').replace(/\D/g, '').includes(digits));
-    });
+    if (!this.counts) return 0;
+    return filter === 'all' ? this.counts.received + this.counts.fixed + this.counts.picked_up : this.counts[filter];
   }
 
   trackById = (_: number, repair: Repair) => repair.id;
@@ -157,11 +204,11 @@ export class RepairsComponent implements OnInit {
 
   /** Repairs still in the shop (received or fixed). */
   get inShop(): number {
-    return this.repairs.filter(r => r.status !== 'picked_up').length;
+    return this.counts ? this.counts.received + this.counts.fixed : 0;
   }
 
   get waitingForPickup(): number {
-    return this.repairs.filter(r => r.status === 'fixed').length;
+    return this.counts?.fixed ?? 0;
   }
 
   // ---------- how a repair is shown ----------

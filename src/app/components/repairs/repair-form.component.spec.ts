@@ -4,7 +4,7 @@ import { Subject, of, throwError } from 'rxjs';
 import { RepairFormComponent, RepairSaved } from './repair-form.component';
 import { RepairService } from '../../services/repair.service';
 import { ProductService } from '../../services/product.service';
-import { PhotoUploadComponent } from '../ui/photo-upload.component';
+import { PhotoUploadComponent } from '../ui/photo-upload/photo-upload.component';
 import { Repair } from '../../models/repair.model';
 import { Invoice } from '../../models/invoice.model';
 import { Product } from '../../models/product.model';

@@ -13,10 +13,6 @@ import { safeReturnUrl, scannedCodeOf } from '../../utils/return-url';
   styleUrl: './login.component.css'
 })
 export class LoginComponent implements OnInit {
-  readonly testerAccounts = [
-    { label: 'Admin', email: 'admin@laptopshop.com', password: 'admin123' },
-    { label: 'Staff 1', email: 'staff1@laptopshop.com', password: 'admin123' }
-  ];
   loginForm: FormGroup;
   isLoading = false;
   errorMessage = '';
@@ -32,8 +28,8 @@ export class LoginComponent implements OnInit {
     private route: ActivatedRoute
   ) {
     this.loginForm = this.fb.group({
-      email: ['admin@laptopshop.com', [Validators.required, Validators.email]],
-      password: ['admin123', [Validators.required, Validators.minLength(6)]]
+      email: ['', [Validators.required, Validators.email]],
+      password: ['', [Validators.required, Validators.minLength(6)]]
     });
   }
 
@@ -43,10 +39,6 @@ export class LoginComponent implements OnInit {
     if (this.authService.isLoggedIn()) {
       this.router.navigateByUrl(this.returnUrl);
     }
-  }
-
-  fillTesterAccount(email: string, password: string): void {
-    this.loginForm.patchValue({ email, password });
   }
 
   onSubmit(): void {

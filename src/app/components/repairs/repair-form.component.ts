@@ -6,8 +6,8 @@ import { RepairService } from '../../services/repair.service';
 import { MAX_REPAIR_DEVICE, MAX_REPAIR_PHOTOS, MAX_REPAIR_PROBLEM, Repair, RepairInput } from '../../models/repair.model';
 import { Invoice, Warranty, formatInvoiceNumber } from '../../models/invoice.model';
 import { Product } from '../../models/product.model';
-import { PhotoUploadComponent } from '../ui/photo-upload.component';
-import { ProductSearchComponent } from '../ui/product-search.component';
+import { PhotoUploadComponent } from '../ui/photo-upload/photo-upload.component';
+import { ProductSearchComponent } from '../ui/product-search/product-search.component';
 import { formatDate, todayIso, weekdayName } from '../../utils/dates';
 import { warrantyText } from '../../utils/warranty';
 

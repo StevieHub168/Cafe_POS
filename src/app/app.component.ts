@@ -4,9 +4,9 @@ import { CommonModule } from '@angular/common';
 import { AuthService } from './services/auth.service';
 import { Observable, Subject, takeUntil } from 'rxjs';
 import { User } from './models/user.model';
-import { SidebarComponent } from './components/ui/sidebar.component';
-import { HeaderComponent } from './components/ui/header.component';
-import { TelegramToastsComponent } from './components/ui/telegram-toasts.component';
+import { SidebarComponent } from './components/ui/sidebar/sidebar.component';
+import { HeaderComponent } from './components/ui/header/header.component';
+import { TelegramToastsComponent } from './components/ui/telegram-toasts/telegram-toasts.component';
 
 const ROUTE_TITLES: Record<string, string> = {
   '/menu': 'Menu',

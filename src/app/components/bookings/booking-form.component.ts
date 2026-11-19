@@ -5,8 +5,8 @@ import { finalize } from 'rxjs';
 import { BookingService } from '../../services/booking.service';
 import { BOOKING_STATUSES, Booking, BookingInput, BookingStatus } from '../../models/booking.model';
 import { Product } from '../../models/product.model';
-import { PhotoUploadComponent } from '../ui/photo-upload.component';
-import { ProductSearchComponent } from '../ui/product-search.component';
+import { PhotoUploadComponent } from '../ui/photo-upload/photo-upload.component';
+import { ProductSearchComponent } from '../ui/product-search/product-search.component';
 import { formatDate, todayIso, weekdayName } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 

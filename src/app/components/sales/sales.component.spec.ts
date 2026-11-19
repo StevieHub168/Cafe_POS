@@ -1,8 +1,8 @@
 import { environment } from '../../../environments/environment';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { Router } from '@angular/router';
-import { Subject, of, throwError } from 'rxjs';
+import { Observable, Subject, of, throwError } from 'rxjs';
 import { SalesComponent } from './sales.component';
 import { InvoiceFormComponent } from '../invoices/invoice-form.component';
 import { InvoiceViewerComponent } from '../invoices/invoice-viewer.component';
@@ -12,6 +12,8 @@ import { ProductService } from '../../services/product.service';
 import { RepairService } from '../../services/repair.service';
 import { Invoice } from '../../models/invoice.model';
 import { Product } from '../../models/product.model';
+import { Paged, SalesCounts } from '../../models/paged.model';
+import { isUnderWarranty } from '../../utils/warranty';
 import { TelegramNotifier } from '../../services/telegram-notifier.service';
 
 /** Where uploaded photos are served from (the API's address without /api): whatever the app is set to. */
@@ -31,6 +33,15 @@ const THIS_MONTH_B: Invoice = { ...base, id: 2, number: 42, invoice_date: '2026-
 const LAST_MONTH: Invoice = { ...base, id: 1, number: 36, invoice_date: '2026-10-05', customer_name: 'Vanna Chea', phone: '099 111 222', telegram: null, warranty: '1_week', deposit: 1000, total: 1499, balance: 499, items: [{ name: 'Asus ROG Strix G16', qty: 1, unit_price: 1499 }] };
 const ALL = [THIS_MONTH_A, THIS_MONTH_B, LAST_MONTH];
 
+/** What the API sends for a page: the rows, where they are in the list, and the numbers of the tabs. */
+const countsOf = (rows: Invoice[]): SalesCounts => ({
+  all: rows.length,
+  month: rows.filter(r => r.invoice_date.slice(0, 7) === '2026-11').length,
+  warranty: rows.filter(r => isUnderWarranty(r.invoice_date, r.warranty, TODAY)).length,
+});
+const pageOf = (rows: Invoice[], over: Partial<Paged<Invoice, { counts: SalesCounts }>> = {}): Paged<Invoice, { counts: SalesCounts }> =>
+  ({ page: 1, per_page: 10, total: rows.length, total_pages: 1, results: rows, meta: { counts: countsOf(rows) }, ...over });
+
 describe('SalesComponent', () => {
   // Sending to Telegram is replaced by a spy here: the real one is tested in telegram-notifier.service.spec.ts.
   let telegramApi: { send: jasmine.Spy };
@@ -42,15 +53,25 @@ describe('SalesComponent', () => {
   let productsApi: { [k: string]: jasmine.Spy };
   let repairsApi: { [k: string]: jasmine.Spy };
   let navigate: jasmine.Spy;
+  /** Every question the page asked the API, as it was when it was asked (page, size, tab, search). */
+  let asked: { page: number; perPage: number; type?: string; period?: string; search?: string }[];
+  /** What the API answers from now on: an answer, or a function that makes one for each question. */
+  const answer = (value: Observable<Paged<Invoice>> | (() => Observable<Paged<Invoice>>)) =>
+    invoicesApi['getInvoicePage'].and.callFake((state: { page: number; perPage: number }, filters: object) => {
+      asked.push({ page: state.page, perPage: state.perPage, ...filters });
+      return typeof value === 'function' ? value() : value;
+    });
 
   async function create(list: Invoice[] = ALL, catalogue: Product[] = []): Promise<void> {
+    asked = [];
     invoicesApi = {
-      getInvoices: jasmine.createSpy('getInvoices').and.returnValue(of(list)),
+      getInvoicePage: jasmine.createSpy('getInvoicePage'),
       getNextNumber: jasmine.createSpy('getNextNumber').and.returnValue(of(47)),
       createInvoice: jasmine.createSpy('createInvoice').and.callFake((b: any) => of({ id: 99, number: 47, total: 10, deposit: 0, balance: 10, ...b })),
       updateInvoice: jasmine.createSpy('updateInvoice').and.callFake((id: number, b: any) => of({ ...THIS_MONTH_A, ...b, id })),
       deleteInvoice: jasmine.createSpy('deleteInvoice').and.returnValue(of({ message: 'ok' })),
     };
+    answer(of(pageOf(list)));
     productsApi = { getAllProducts: jasmine.createSpy('getAllProducts').and.returnValue(of(catalogue)) };
     repairsApi = { createRepair: jasmine.createSpy('createRepair').and.callFake((r: any) => of({ id: 9, fixed_date: null, picked_up_date: null, ...r })) };
     navigate = jasmine.createSpy('navigate').and.resolveTo(true);
@@ -99,9 +120,9 @@ describe('SalesComponent', () => {
   });
 
   describe('the list', () => {
-    it('asks for the SALE invoices only (the paper of a booking or a repair is not a sale)', async () => {
+    it('asks for the SALE invoices only (the paper of a booking or a repair is not a sale), the first page, 10 on a page', async () => {
       await create();
-      expect(invoicesApi['getInvoices']).toHaveBeenCalledOnceWith('sale');
+      expect(asked).toEqual([{ page: 1, perPage: 10, type: 'sale', period: undefined, search: '' }]);
     });
 
     it('shows each sale as a card: number, "Sold" date, what was sold, customer, contact, total', async () => {
@@ -165,7 +186,7 @@ describe('SalesComponent', () => {
 
     it('shows the reason when the sales cannot be loaded', async () => {
       await create();
-      invoicesApi['getInvoices'].and.returnValue(throwError(() => ({ error: { error: 'Database is down' } })));
+      answer(throwError(() => ({ error: { error: 'Database is down' } })));
       component.loadSales();
       fixture.detectChanges();
       expect(text()).toContain('Database is down');
@@ -173,17 +194,17 @@ describe('SalesComponent', () => {
 
     it('a load error with no reason says so in plain words', async () => {
       await create();
-      invoicesApi['getInvoices'].and.returnValue(throwError(() => new Error('offline')));
+      answer(throwError(() => new Error('offline')));
       component.loadSales();
       fixture.detectChanges();
       expect(text()).toContain('Failed to load sales.');
     });
 
-    it('while loading it shows placeholders, not "No sales yet."', async () => {
+    it('while loading it shows the grey shapes of the cards and of the numbers, not "No sales yet."', async () => {
       await TestBed.configureTestingModule({
         imports: [SalesComponent],
         providers: [
-          { provide: InvoiceService, useValue: { getInvoices: () => new Subject<Invoice[]>() } },
+          { provide: InvoiceService, useValue: { getInvoicePage: () => new Subject<Paged<Invoice>>() } },
           { provide: ProductService, useValue: { getAllProducts: () => of([]) } },
           { provide: TelegramNotifier, useValue: telegramApi },
           { provide: RepairService, useValue: {} },
@@ -192,7 +213,10 @@ describe('SalesComponent', () => {
       }).compileComponents();
       fixture = TestBed.createComponent(SalesComponent);
       fixture.detectChanges();
-      expect(dom().querySelectorAll('.animate-pulse').length).toBe(4);
+      expect(dom().querySelectorAll('[data-skeleton][data-kind="cards"] [data-skeleton-item]').length).toBe(4);
+      expect(dom().querySelectorAll('[data-skeleton][data-kind="stats"] [data-skeleton-item]').length).toBe(2);
+      expect(dom().querySelector('[data-summary]')).toBeNull();
+      expect(dom().querySelector('[data-pagination]')).toBeNull();
       expect(text()).not.toContain('No sales yet.');
     });
   });
@@ -251,63 +275,271 @@ describe('SalesComponent', () => {
       expect(dom().querySelector('[data-sold]')!.textContent!.trim()).toBe('0');
       expect(dom().querySelector('[data-warranty-count]')!.textContent!.trim()).toBe('0');
     });
+
+    it('are the API\'s counts of ALL the sales, not of the page that is on screen', async () => {
+      await create(ALL);
+      answer(of(pageOf([THIS_MONTH_A], { total: 40, total_pages: 4, meta: { counts: { all: 40, month: 12, warranty: 7 } } })));
+      component.loadSales();
+      fixture.detectChanges();
+      expect(dom().querySelector('[data-sold]')!.textContent!.trim()).toBe('12');
+      expect(dom().querySelector('[data-warranty-count]')!.textContent!.trim()).toBe('7');
+      expect(tab('All').textContent!.replace(/\s+/g, '')).toBe('All40');
+    });
   });
 
   describe('tabs and search', () => {
-    it('has All, This month and Under warranty, with the number of sales in each', async () => {
+    const lastAsk = () => asked[asked.length - 1];
+
+    it('has All, This month and Under warranty, with the number of sales in each (counted by the API)', async () => {
       await create();
       expect(['All', 'This month', 'Under warranty'].map(l => tab(l).textContent!.replace(/\s+/g, ''))).toEqual(['All3', 'Thismonth2', 'Underwarranty2']);
     });
 
-    it('"This month" shows only this month\'s sales and is marked as the current one', async () => {
+    it('"This month" asks the API for this month\'s sales, shows what it sends, and is marked as the current one', async () => {
       await create();
+      answer(of(pageOf([THIS_MONTH_A, THIS_MONTH_B], { meta: { counts: countsOf(ALL) } })));
       tab('This month').click();
       fixture.detectChanges();
+      expect(lastAsk()).toEqual({ page: 1, perPage: 10, type: 'sale', period: 'month', search: '' });
       expect(numbers()).toEqual(['000044', '000042']);
       expect(tab('This month').getAttribute('aria-pressed')).toBe('true');
       expect(tab('All').getAttribute('aria-pressed')).toBe('false');
     });
 
-    it('"Under warranty" shows only the sales whose warranty is still running', async () => {
+    it('"Under warranty" asks for the sales whose warranty is still running; "All" asks for everything again', async () => {
       await create();
       tab('Under warranty').click();
       fixture.detectChanges();
-      expect(numbers()).toEqual(['000044', '000042']);
+      expect(lastAsk().period).toBe('warranty');
       tab('All').click();
       fixture.detectChanges();
+      expect(lastAsk().period).toBeUndefined();
+    });
+
+    it('pressing the tab you are on asks nothing', async () => {
+      await create();
+      const before = asked.length;
+      tab('All').click();
+      fixture.detectChanges();
+      expect(asked.length).toBe(before);
+    });
+
+    it('the numbers of the tabs do not change with the tab or the search (the API counts them all)', async () => {
+      await create();
+      answer(of(pageOf([LAST_MONTH], { total: 1, meta: { counts: countsOf(ALL) } })));
+      tab('Under warranty').click();
+      fixture.detectChanges();
+      expect(['All', 'This month', 'Under warranty'].map(l => tab(l).textContent!.replace(/\s+/g, ''))).toEqual(['All3', 'Thismonth2', 'Underwarranty2']);
+    });
+
+    it('typing in the search box asks the API with that text, from the first page, when the typing stops', fakeAsync(() => {
+      create().then(() => {
+        const before = asked.length;
+        search('vanna');
+        expect(asked.length).toBe(before);          // not yet: the person may still be typing
+        tick(299);
+        expect(asked.length).toBe(before);
+        tick(1);
+        expect(asked.length).toBe(before + 1);
+        expect(lastAsk()).toEqual({ page: 1, perPage: 10, type: 'sale', period: undefined, search: 'vanna' });
+      });
+      tick();
+    }));
+
+    it('a word typed letter by letter is ONE question, not one for each letter', fakeAsync(() => {
+      create().then(() => {
+        const before = asked.length;
+        for (const text of ['v', 'va', 'van', 'vann', 'vanna']) { search(text); tick(100); }
+        tick(300);
+        expect(asked.length).toBe(before + 1);
+        expect(lastAsk().search).toBe('vanna');
+      });
+      tick();
+    }));
+
+    it('a new search starts from the first page', fakeAsync(() => {
+      create().then(() => {
+        answer(of(pageOf([THIS_MONTH_A], { page: 3, total: 25, total_pages: 3 })));
+        component.loadSales();
+        fixture.detectChanges();
+        expect(component.paging.page).toBe(3);
+        search('dell');
+        tick(300);
+        expect(lastAsk().page).toBe(1);
+      });
+      tick();
+    }));
+
+    it('search and tab work together, and "No sales found." appears when nothing matches', fakeAsync(() => {
+      create().then(() => {
+        answer(of(pageOf([], { meta: { counts: countsOf(ALL) } })));
+        tab('This month').click();
+        search('vanna');
+        tick(300);
+        fixture.detectChanges();
+        expect(lastAsk()).toEqual({ page: 1, perPage: 10, type: 'sale', period: 'month', search: 'vanna' });
+        expect(cards().length).toBe(0);
+        expect(text()).toContain('No sales found.');
+        expect(text()).not.toContain('No sales yet.');
+      });
+      tick();
+    }));
+
+    it('while the answer to a tab is coming, the grey shapes are shown', async () => {
+      await create();
+      const pending = new Subject<Paged<Invoice>>();
+      answer(pending);
+      tab('This month').click();
+      fixture.detectChanges();
+      expect(dom().querySelector('[data-skeleton][data-kind="cards"]')).not.toBeNull();
+      expect(cards().length).toBe(0);
+      pending.next(pageOf([THIS_MONTH_A]));
+      pending.complete();
+      fixture.detectChanges();
+      expect(dom().querySelector('[data-skeleton][data-kind="cards"]')).toBeNull();
+      expect(numbers()).toEqual(['000044']);
+    });
+  });
+
+  describe('the pages', () => {
+    const lastAsk = () => asked[asked.length - 1];
+    const bar = () => dom().querySelector('[data-pagination]') as HTMLElement | null;
+    const barText = () => bar()!.querySelector('[data-range]')!.textContent!.replace(/\s+/g, ' ').trim();
+    const manyPages = (rows: Invoice[], over: Partial<Paged<Invoice, { counts: SalesCounts }>> = {}) =>
+      pageOf(rows, { page: 1, per_page: 10, total: 25, total_pages: 3, meta: { counts: { all: 25, month: 5, warranty: 4 } }, ...over });
+
+    beforeEach(() => spyOn(window, 'scrollTo'));
+
+    it('says which sales are on screen: "Showing 1–3 of 3" (no "Per page" box: even 10 on a page shows them all)', async () => {
+      await create();
+      expect(barText()).toBe('Showing 1–3 of 3');
+      expect(bar()!.querySelector('[data-per-page]')).toBeNull();
+      expect(bar()!.querySelector('[data-next]')).toBeNull();            // one page: no buttons
+    });
+
+    it('with many sales: "Showing 1–10 of 25", and Next, the page numbers and "Page 1 of 3"', async () => {
+      await create();
+      answer(of(manyPages(ALL)));
+      component.loadSales();
+      fixture.detectChanges();
+      expect(barText()).toBe('Showing 1–10 of 25');
+      expect(bar()!.querySelectorAll('[data-page]').length).toBe(3);
+      expect(bar()!.querySelector('[data-page-of]')!.textContent!.trim()).toBe('Page 1 of 3');
+    });
+
+    it('Next asks the API for the next page, shows the grey shapes meanwhile, and shows the new page', async () => {
+      await create();
+      answer(of(manyPages(ALL)));
+      component.loadSales();
+      fixture.detectChanges();
+
+      const pending = new Subject<Paged<Invoice, { counts: SalesCounts }>>();
+      answer(pending);
+      (bar()!.querySelector('[data-next]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(lastAsk().page).toBe(2);
+      expect(dom().querySelector('[data-skeleton][data-kind="cards"]')).not.toBeNull();
+      expect(bar()).toBeNull();
+
+      pending.next(manyPages([LAST_MONTH], { page: 2 }));
+      pending.complete();
+      fixture.detectChanges();
+      expect(numbers()).toEqual(['000036']);
+      expect(barText()).toBe('Showing 11–20 of 25');
+      expect(window.scrollTo as jasmine.Spy).toHaveBeenCalled();
+    });
+
+    it('a page number asks for that page', async () => {
+      await create();
+      answer(of(manyPages(ALL)));
+      component.loadSales();
+      fixture.detectChanges();
+      Array.from(bar()!.querySelectorAll('[data-page]') as NodeListOf<HTMLButtonElement>).find(b => b.textContent!.trim() === '3')!.click();
+      expect(lastAsk().page).toBe(3);
+    });
+
+    it('"Per page" asks for that many on a page, from the first page', async () => {
+      await create();
+      answer(of(manyPages(ALL, { page: 2 })));
+      component.loadSales();
+      fixture.detectChanges();
+      const select = bar()!.querySelector('[data-per-page]') as HTMLSelectElement;
+      select.value = '50';
+      select.dispatchEvent(new Event('change'));
+      expect(lastAsk()).toEqual(jasmine.objectContaining({ page: 1, perPage: 50 }));
+    });
+
+    it('a tab starts from the first page', async () => {
+      await create();
+      answer(of(manyPages(ALL, { page: 3 })));
+      component.loadSales();
+      fixture.detectChanges();
+      tab('This month').click();
+      expect(lastAsk().page).toBe(1);
+    });
+
+    it('a new sale goes to the first page (the newest sale is the first one)', async () => {
+      await create();
+      answer(of(manyPages(ALL, { page: 3 })));
+      component.loadSales();
+      fixture.detectChanges();
+      buttonIn(dom(), 'New sale').click();
+      await settle();
+      invoiceForm().form.items = [{ name: 'Mouse', qty: 1, unit_price: 10 }];
+      invoiceForm().form.warranty = '1_week';
+      invoiceForm().submit();
+      fixture.detectChanges();
+      expect(lastAsk().page).toBe(1);
+    });
+
+    it('changing a sale stays on the same page', async () => {
+      await create();
+      answer(of(manyPages(ALL, { page: 2 })));
+      component.loadSales();
+      fixture.detectChanges();
+      buttonIn(cards()[1], 'Edit').click();
+      await settle();
+      invoiceForm().form.customer_name = 'Sok Dara Jr.';
+      invoiceForm().submit();
+      fixture.detectChanges();
+      expect(lastAsk().page).toBe(2);
+    });
+
+    it('after the last sale of a page is deleted, the page before it is shown (not an empty page)', async () => {
+      await create();
+      answer(of(manyPages([LAST_MONTH], { page: 3, total: 21 })));
+      component.loadSales();
+      fixture.detectChanges();
+      buttonIn(cards()[0], 'Delete').click();
+      fixture.detectChanges();
+      // the API now has 20 sales: page 3 is empty
+      const answers = [manyPages([], { page: 3, total: 20, total_pages: 2 }), manyPages(ALL, { page: 2, total: 20, total_pages: 2 })];
+      answer(() => of(answers.shift()!));
+      buttonIn(dialog()!, 'Delete sale').click();
+      fixture.detectChanges();
+      expect(lastAsk().page).toBe(2);
+      expect(component.paging.page).toBe(2);
       expect(cards().length).toBe(3);
     });
 
-    it('the last day of a warranty still counts', async () => {
-      await create([{ ...THIS_MONTH_A, invoice_date: '2026-11-04', warranty: '1_week' }]);       // ends 11/11 = today
-      expect(tab('Under warranty').textContent!.replace(/\s+/g, '')).toBe('Underwarranty1');
-    });
-
-    it('search finds by number (44 or 000044), customer, Telegram, phone digits and item', async () => {
+    it('a slow answer to an old question never replaces the answer to a newer one', async () => {
       await create();
-      search('44');
-      expect(numbers()).toEqual(['000044']);
-      search('000042');
-      expect(numbers()).toEqual(['000042']);
-      search('vanna');
-      expect(numbers()).toEqual(['000036']);
-      search('soklea');
-      expect(numbers()).toEqual(['000044']);
-      search('099 111');
-      expect(numbers()).toEqual(['000036']);
-      search('laptop bag');
-      expect(numbers()).toEqual(['000042']);
-      search('asus');
-      expect(numbers()).toEqual(['000036']);
-    });
-
-    it('search and tab work together, and "No sales found." appears when nothing matches', async () => {
-      await create();
+      const slow = new Subject<Paged<Invoice, { counts: SalesCounts }>>();
+      const fast = new Subject<Paged<Invoice, { counts: SalesCounts }>>();
+      const queue = [slow, fast];
+      answer(() => queue.shift()!);
       tab('This month').click();
-      search('vanna');
-      expect(cards().length).toBe(0);
-      expect(text()).toContain('No sales found.');
-      expect(text()).not.toContain('No sales yet.');
+      tab('Under warranty').click();
+      fixture.detectChanges();
+      fast.next(pageOf([THIS_MONTH_B]));
+      slow.next(pageOf([LAST_MONTH]));
+      fixture.detectChanges();
+      expect(numbers()).toEqual(['000042']);
+    });
+
+    it('no bar while there is nothing to page through', async () => {
+      await create([]);
+      expect(bar()).toBeNull();
     });
   });
 
@@ -331,7 +563,7 @@ describe('SalesComponent', () => {
       await create();
       buttonIn(dom(), 'New sale').click();
       await settle();
-      const loads = invoicesApi['getInvoices'].calls.count();
+      const loads = asked.length;
       invoiceForm().form.items = [{ name: 'Mouse', qty: 1, unit_price: 10 }];
       invoiceForm().form.warranty = '1_week';
       invoiceForm().submit();
@@ -339,7 +571,7 @@ describe('SalesComponent', () => {
       expect(invoicesApi['createInvoice']).toHaveBeenCalledTimes(1);
       expect(editor()).toBeNull();
       expect(viewerComponent().invoice.number).toBe(47);
-      expect(invoicesApi['getInvoices'].calls.count()).toBe(loads + 1);
+      expect(asked.length).toBe(loads + 1);
       expect(text()).toContain('Sale 000047 saved.');
     });
 
@@ -505,12 +737,12 @@ describe('SalesComponent', () => {
 
     it('"Delete sale" deletes THAT sale, reloads and says so', async () => {
       await open(2);
-      const loads = invoicesApi['getInvoices'].calls.count();
+      const loads = asked.length;
       buttonIn(dialog()!, 'Delete sale').click();
       fixture.detectChanges();
       expect(invoicesApi['deleteInvoice']).toHaveBeenCalledOnceWith(1);
       expect(dialog()).toBeNull();
-      expect(invoicesApi['getInvoices'].calls.count()).toBe(loads + 1);
+      expect(asked.length).toBe(loads + 1);
       expect(text()).toContain('Sale 000036 deleted.');
     });
 

@@ -1,7 +1,7 @@
 import { Component, EventEmitter, Input, OnChanges, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive } from '@angular/router';
-import { User } from '../../models/user.model';
+import { User } from '../../../models/user.model';
 
 interface NavItem {
   label: string;

@@ -9,10 +9,11 @@ import { Category } from '../models/category.model';
 import { ProductService } from '../services/product.service';
 import { CategoryService } from '../services/category.service';
 import { ImgSrcPipe } from '../pipes/img-src.pipe';
-import { StatusBadgeComponent } from '../components/ui/status-badge.component';
-import { BrandLogoComponent } from '../components/ui/brand-logo.component';
+import { StatusBadgeComponent } from '../components/ui/status-badge/status-badge.component';
+import { SkeletonComponent } from '../components/ui/skeleton/skeleton.component';
+import { BrandLogoComponent } from '../components/ui/brand-logo/brand-logo.component';
 import { StockInfo, stockInfo } from '../models/stock-status';
-import { AskDialogComponent } from '../components/ui/ask-dialog.component';
+import { AskDialogComponent } from '../components/ui/ask-dialog/ask-dialog.component';
 import { BookingFormComponent, BookingSaved } from '../components/bookings/booking-form.component';
 import { InvoiceEditorComponent } from '../components/invoices/invoice-editor.component';
 import { InvoiceViewerComponent } from '../components/invoices/invoice-viewer.component';
@@ -40,7 +41,7 @@ interface SoldReview {
 @Component({
   selector: 'app-menu',
   standalone: true,
-  imports: [CommonModule, FormsModule, ImgSrcPipe, StatusBadgeComponent, BrandLogoComponent, AskDialogComponent, BookingFormComponent, InvoiceEditorComponent, InvoiceViewerComponent, RepairFormComponent],
+  imports: [CommonModule, FormsModule, ImgSrcPipe, SkeletonComponent, StatusBadgeComponent, BrandLogoComponent, AskDialogComponent, BookingFormComponent, InvoiceEditorComponent, InvoiceViewerComponent, RepairFormComponent],
   templateUrl: './menu.component.html',
   styleUrl: './menu.component.css'
 })

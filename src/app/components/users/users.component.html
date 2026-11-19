@@ -1,5 +1,11 @@
 <div class="space-y-5">
-  <app-page-header title="Users" description="Only an admin sees this page. Reset a password for someone who forgot it."></app-page-header>
+  <app-page-header title="Users" description="">
+    <button type="button" (click)="openAdd()" data-action="add"
+      class="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
+      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+      Add member
+    </button>
+  </app-page-header>
 
   <!-- Error -->
   <div *ngIf="errorMessage" role="alert" class="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
@@ -13,7 +19,7 @@
     <span>{{ successMessage }}</span>
   </div>
 
-  <div *ngIf="isLoading" class="rounded-lg border border-surface-border bg-white px-4 py-12 text-center text-sm text-gray-500">Loading...</div>
+  <app-skeleton *ngIf="isLoading" kind="users" [count]="4"></app-skeleton>
 
   <!-- One card each, two per row on a wide screen. On a phone the button is on its own row, so the name and email fit. -->
   <div *ngIf="!isLoading && users.length > 0" class="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -39,6 +45,25 @@
 
   <div *ngIf="!isLoading && !errorMessage && users.length === 0" class="rounded-lg border border-surface-border bg-white px-4 py-12 text-center shadow-card">
     <p class="text-base font-medium text-gray-700">No users found.</p>
+  </div>
+</div>
+
+<!-- ============ Add member: a panel that slides in from the right edge (the form is <app-member-form>) ============ -->
+<div *ngIf="adding" class="drawer-backdrop fixed inset-0 z-50 flex justify-end bg-gray-900/50" (click)="closeAdd()">
+  <div class="drawer-panel flex h-full w-full max-w-lg flex-col bg-white shadow-2xl" role="dialog" aria-modal="true" aria-label="Add member"
+       (click)="$event.stopPropagation()">
+
+    <div class="flex flex-shrink-0 items-center justify-between border-b border-surface-border px-5 py-4">
+      <div class="min-w-0">
+        <h2 class="text-base font-semibold text-gray-900">Add member</h2>
+        <p class="text-xs text-gray-400">They sign in with their email and the password you write.</p>
+      </div>
+      <button type="button" (click)="closeAdd()" class="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600" aria-label="Close">
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+      </button>
+    </div>
+
+    <app-member-form (saved)="onAdded($event)" (cancelled)="closeAdd()"></app-member-form>
   </div>
 </div>
 

@@ -15,16 +15,6 @@
         </div>
 
         <div class="rounded-xl border border-surface-border bg-white p-6 shadow-card">
-            <div class="mb-5 flex gap-2">
-                <button
-                    *ngFor="let account of testerAccounts"
-                    type="button"
-                    (click)="fillTesterAccount(account.email, account.password)"
-                    class="flex-1 rounded-lg border border-surface-border bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700 transition hover:border-primary-200 hover:bg-primary-50 hover:text-primary-700">
-                    {{ account.label }}
-                </button>
-            </div>
-
             <form [formGroup]="loginForm" (ngSubmit)="onSubmit()">
                 <div *ngIf="errorMessage" class="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
                     {{ errorMessage }}

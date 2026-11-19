@@ -14,9 +14,7 @@
   </div>
 
   <!-- Loading -->
-  <div *ngIf="isLoading && !stats" class="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5" aria-busy="true">
-    <div *ngFor="let n of [1,2,3,4,5]" class="h-28 animate-pulse rounded-lg border border-surface-border bg-white"></div>
-  </div>
+  <app-skeleton *ngIf="isLoading && !stats" kind="stats" [count]="5" gridClass="grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5"></app-skeleton>
 
   <ng-container *ngIf="stats as s">
 

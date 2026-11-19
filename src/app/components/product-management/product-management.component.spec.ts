@@ -2559,4 +2559,174 @@ describe('ProductManagementComponent - product drawer', () => {
       expect(component.formError).toContain('Other price 1');
     });
   });
+
+  describe('grey shapes and pages', () => {
+    const load = (list: any[]) => {
+      products['getAllProducts'].and.returnValue(of(list));
+      component.loadProducts();
+      component.closeProductModal();
+      fixture.detectChanges();
+    };
+    /** `n` laptops that are not sold: "Laptop 01", "Laptop 02", ... */
+    const many = (n: number) => Array.from({ length: n }, (_, i) => ({ ...catalog[3], id: 100 + i, sku: `WIN-ASU-${100 + i}`, name: `Laptop ${String(i + 1).padStart(2, '0')}`, is_archived: false }));
+    const rows = () => Array.from(dom().querySelectorAll('tbody tr')) as HTMLElement[];
+    const cardEls = () => Array.from(dom().querySelectorAll('[data-card]')) as HTMLElement[];
+    const toggle = (label: string) => Array.from(dom().querySelectorAll('[role="group"] button')).find(b => b.textContent!.trim() === label) as HTMLButtonElement;
+    const bar = () => dom().querySelector('[data-pagination]') as HTMLElement | null;
+    const barText = () => bar()!.querySelector('[data-range]')!.textContent!.replace(/\s+/g, ' ').trim();
+    const next = () => (bar()!.querySelector('[data-next]') as HTMLButtonElement);
+    const searchFor = (value: string) => {
+      const box = dom().querySelector('input[aria-label="Search products"]') as HTMLInputElement;
+      box.value = value;
+      box.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+    };
+
+    beforeEach(() => spyOn(window, 'scrollTo'));
+
+    describe('grey shapes', () => {
+      it('the first load shows the shape of the table, and then the table', () => {
+        const pending = new Subject<any[]>();
+        products['getAllProducts'].and.returnValue(pending);
+        component.loadProducts(true);
+        fixture.detectChanges();
+        expect(dom().querySelectorAll('[data-skeleton][data-kind="table"] [data-skeleton-item]').length).toBe(8);
+        expect(dom().querySelector('table')).toBeNull();
+        expect(bar()).toBeNull();
+        expect(text()).not.toContain('No products found.');
+        pending.next(catalog);
+        pending.complete();
+        fixture.detectChanges();
+        expect(dom().querySelector('[data-skeleton]')).toBeNull();
+        expect(rows().length).toBe(catalog.length);
+      });
+
+      it('as cards, the first load shows the shape of the cards', () => {
+        load(catalog);
+        toggle('Cards').click();
+        const pending = new Subject<any[]>();
+        products['getAllProducts'].and.returnValue(pending);
+        component.loadProducts(true);
+        fixture.detectChanges();
+        expect(dom().querySelectorAll('[data-skeleton][data-kind="product-cards"] [data-skeleton-item]').length).toBe(10);
+        expect(cardEls().length).toBe(0);
+        pending.next(catalog);
+        pending.complete();
+        fixture.detectChanges();
+        expect(dom().querySelector('[data-skeleton]')).toBeNull();
+        expect(cardEls().length).toBe(catalog.length);
+      });
+
+      it('"No categories yet." is not shown while the categories are still coming, only when there are none', () => {
+        const pending = new Subject<any[]>();
+        categories['getCategories'].and.returnValue(pending);
+        component.categoriesLoaded = false;
+        component.loadCategories();
+        fixture.detectChanges();
+        expect(text()).not.toContain('No categories yet.');
+        pending.next([]);
+        pending.complete();
+        fixture.detectChanges();
+        expect(text()).toContain('No categories yet.');
+      });
+
+      it('a reload after a save is quiet: the list stays on screen', () => {
+        load(catalog);
+        const pending = new Subject<any[]>();
+        products['getAllProducts'].and.returnValue(pending);
+        component.loadProducts();
+        fixture.detectChanges();
+        expect(dom().querySelector('[data-skeleton]')).toBeNull();
+        expect(rows().length).toBe(catalog.length);
+      });
+    });
+
+    describe('pages', () => {
+      it('20 products on a page: with 25 the table shows 20 and "Showing 1–20 of 25"', () => {
+        load(many(25));
+        expect(rows().length).toBe(20);
+        expect(barText()).toBe('Showing 1–20 of 25');
+        expect(dom().querySelector('h2.truncate')!.textContent!.replace(/\s+/g, '')).toContain('(25)');
+      });
+
+      it('Next shows the rest, and Previous comes back', () => {
+        load(many(25));
+        next().click();
+        fixture.detectChanges();
+        expect(rows().length).toBe(5);
+        expect(rows()[0].textContent).toContain('Laptop 21');
+        expect(rows()[4].textContent).toContain('Laptop 25');
+        expect(barText()).toBe('Showing 21–25 of 25');
+        (bar()!.querySelector('[data-previous]') as HTMLButtonElement).click();
+        fixture.detectChanges();
+        expect(rows().length).toBe(20);
+      });
+
+      it('the cards are cut in pages too', () => {
+        load(many(25));
+        toggle('Cards').click();
+        fixture.detectChanges();
+        expect(cardEls().length).toBe(20);
+        next().click();
+        fixture.detectChanges();
+        expect(cardEls().length).toBe(5);
+      });
+
+      it('"Per page" changes how many are shown, from the first page', () => {
+        load(many(25));
+        next().click();
+        fixture.detectChanges();
+        const select = bar()!.querySelector('[data-per-page]') as HTMLSelectElement;
+        select.value = '10';
+        select.dispatchEvent(new Event('change'));
+        fixture.detectChanges();
+        expect(rows().length).toBe(10);
+        expect(barText()).toBe('Showing 1–10 of 25');
+      });
+
+      it('a new search starts from the first page', () => {
+        load(many(25));
+        next().click();
+        fixture.detectChanges();
+        searchFor('laptop');
+        expect(barText()).toBe('Showing 1–20 of 25');
+      });
+
+      it('choosing a category or a brand starts from the first page', () => {
+        load(many(25));
+        next().click();
+        fixture.detectChanges();
+        component.selectCategory(2);
+        fixture.detectChanges();
+        expect(barText()).toBe('Showing 1–20 of 25');
+        next().click();
+        fixture.detectChanges();
+        component.selectBrand('Asus');
+        fixture.detectChanges();
+        expect(barText()).toBe('Showing 1–20 of 25');
+      });
+
+      it('when products are gone and the page is past the last one, the last page is shown (never an empty page)', () => {
+        load(many(25));
+        next().click();
+        fixture.detectChanges();
+        load(many(20));
+        expect(rows().length).toBe(20);
+        expect(barText()).toBe('Showing 1–20 of 20');
+      });
+
+      it('the number next to the title is all the products that match, not only the page', () => {
+        load(many(25));
+        component.searchQuery = 'Laptop 2';
+        fixture.detectChanges();
+        expect(dom().querySelector('h2.truncate')!.textContent!.replace(/\s+/g, '')).toContain('(6)');
+      });
+
+      it('no bar when there are no products to show', () => {
+        load([]);
+        expect(bar()).toBeNull();
+        expect(text()).toContain('No products found.');
+      });
+    });
+  });
 });

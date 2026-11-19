@@ -1,5 +1,5 @@
 export const environment = {
     production: true,
-    apiUrl: 'https://cartoons-become-charging-benefit.trycloudflare.com/api',
+    apiUrl: 'https://trace-triple-saskatchewan-todd.trycloudflare.com/api',
     adminEmail: 'admin@gmail.com'
 };

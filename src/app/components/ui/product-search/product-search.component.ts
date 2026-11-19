@@ -1,8 +1,8 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Product } from '../../models/product.model';
-import { ImgSrcPipe } from '../../pipes/img-src.pipe';
-import { formatMoney } from '../../utils/money';
+import { Product } from '../../../models/product.model';
+import { ImgSrcPipe } from '../../../pipes/img-src.pipe';
+import { formatMoney } from '../../../utils/money';
 
 /**
  * "Type to find one of your products": a text box, and under it the products that match what is typed (photo, name, price).

@@ -1,7 +1,7 @@
 import { environment } from '../../../environments/environment';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { Subject, of, throwError } from 'rxjs';
+import { Observable, Subject, of, throwError } from 'rxjs';
 import { RepairsComponent } from './repairs.component';
 import { RepairFormComponent } from './repair-form.component';
 import { InvoiceFormComponent } from '../invoices/invoice-form.component';
@@ -12,6 +12,7 @@ import { ProductService } from '../../services/product.service';
 import { Repair } from '../../models/repair.model';
 import { Invoice } from '../../models/invoice.model';
 import { Product } from '../../models/product.model';
+import { Paged, RepairCounts } from '../../models/paged.model';
 import { TelegramNotifier } from '../../services/telegram-notifier.service';
 
 /** Where uploaded photos are served from (the API's address without /api): whatever the app is set to. */
@@ -46,6 +47,15 @@ const SALE: Invoice = {
   items: [{ name: 'MacBook Air 13" M1', qty: 1, unit_price: 799 }],
 };
 
+/** What the API sends for a page: the rows, where they are in the list, and how many repairs are in each step. */
+const countsOf = (rows: Repair[]): RepairCounts => ({
+  received: rows.filter(r => r.status === 'received').length,
+  fixed: rows.filter(r => r.status === 'fixed').length,
+  picked_up: rows.filter(r => r.status === 'picked_up').length,
+});
+const pageOf = (rows: Repair[], over: Partial<Paged<Repair, { counts: RepairCounts }>> = {}): Paged<Repair, { counts: RepairCounts }> =>
+  ({ page: 1, per_page: 10, total: rows.length, total_pages: 1, results: rows, meta: { counts: countsOf(rows) }, ...over });
+
 describe('RepairsComponent', () => {
   // Sending to Telegram is replaced by a spy here: the real one is tested in telegram-notifier.service.spec.ts.
   let telegramApi: { send: jasmine.Spy };
@@ -56,14 +66,25 @@ describe('RepairsComponent', () => {
   let repairsApi: { [k: string]: jasmine.Spy };
   let invoicesApi: { [k: string]: jasmine.Spy };
   let productsApi: { [k: string]: jasmine.Spy };
+  /** Every question the page asked the API, as it was when it was asked (page, size, step, search). */
+  let asked: { page: number; perPage: number; status?: string; search?: string }[];
+  /** What the API answers from now on: an answer, or a function that makes one for each question. */
+  const answer = (value: Observable<Paged<Repair>> | (() => Observable<Paged<Repair>>)) =>
+    repairsApi['getRepairPage'].and.callFake((state: { page: number; perPage: number }, filters: object) => {
+      asked.push({ page: state.page, perPage: state.perPage, ...filters });
+      return typeof value === 'function' ? value() : value;
+    });
 
-  async function create(list: Repair[] = ALL, invoices: Invoice[] = [], catalogue: Product[] = []): Promise<void> {
+  /** `list` = every repair that exists; `onPage` = the ones the first page shows (all of them, unless a test says otherwise). */
+  async function create(list: Repair[] = ALL, invoices: Invoice[] = [], catalogue: Product[] = [], onPage: Repair[] = list): Promise<void> {
+    asked = [];
     repairsApi = {
-      getRepairs: jasmine.createSpy('getRepairs').and.returnValue(of(list)),
+      getRepairPage: jasmine.createSpy('getRepairPage'),
       createRepair: jasmine.createSpy('createRepair').and.callFake((r: any) => of({ id: 99, fixed_date: null, picked_up_date: null, ...r })),
       updateRepair: jasmine.createSpy('updateRepair').and.callFake((id: number, c: any) => of({ ...RECEIVED, ...c, id })),
       deleteRepair: jasmine.createSpy('deleteRepair').and.returnValue(of({ message: 'ok' })),
     };
+    answer(of(pageOf(onPage)));
     invoicesApi = {
       getInvoices: jasmine.createSpy('getInvoices').and.returnValue(of(invoices)),
       getNextNumber: jasmine.createSpy('getNextNumber').and.returnValue(of(47)),
@@ -195,9 +216,14 @@ describe('RepairsComponent', () => {
       expect(text()).toContain('Click New repair when a laptop comes in.');
     });
 
+    it('asks for the first page of all the repairs, 10 on a page', async () => {
+      await create();
+      expect(asked).toEqual([{ page: 1, perPage: 10, search: '' }]);
+    });
+
     it('shows the reason when the repairs cannot be loaded', async () => {
       await create();
-      repairsApi['getRepairs'].and.returnValue(throwError(() => ({ error: { error: 'Database is down' } })));
+      answer(throwError(() => ({ error: { error: 'Database is down' } })));
       component.loadRepairs();
       fixture.detectChanges();
       expect(text()).toContain('Database is down');
@@ -205,17 +231,17 @@ describe('RepairsComponent', () => {
 
     it('a load error with no reason says so in plain words', async () => {
       await create();
-      repairsApi['getRepairs'].and.returnValue(throwError(() => new Error('offline')));
+      answer(throwError(() => new Error('offline')));
       component.loadRepairs();
       fixture.detectChanges();
       expect(text()).toContain('Failed to load repairs.');
     });
 
-    it('while loading it shows placeholders, not "No repairs yet."', async () => {
+    it('while loading it shows the grey shapes of the cards and of the numbers, not "No repairs yet."', async () => {
       await TestBed.configureTestingModule({
         imports: [RepairsComponent],
         providers: [
-          { provide: RepairService, useValue: { getRepairs: () => new Subject<Repair[]>() } },
+          { provide: RepairService, useValue: { getRepairPage: () => new Subject<Paged<Repair>>() } },
           { provide: InvoiceService, useValue: { getInvoices: () => of([]) } },
           { provide: ProductService, useValue: { getAllProducts: () => of([]) } },
           { provide: TelegramNotifier, useValue: telegramApi },
@@ -223,8 +249,26 @@ describe('RepairsComponent', () => {
       }).compileComponents();
       fixture = TestBed.createComponent(RepairsComponent);
       fixture.detectChanges();
-      expect(dom().querySelectorAll('.animate-pulse').length).toBe(4);
+      expect(dom().querySelectorAll('[data-skeleton][data-kind="cards"] [data-skeleton-item]').length).toBe(4);
+      expect(dom().querySelectorAll('[data-skeleton][data-kind="stats"] [data-skeleton-item]').length).toBe(2);
+      expect(dom().querySelector('[data-summary]')).toBeNull();
+      expect(dom().querySelector('[data-pagination]')).toBeNull();
       expect(text()).not.toContain('No repairs yet.');
+    });
+
+    it('the grey shapes go away when the page comes', async () => {
+      await create();
+      const pending = new Subject<Paged<Repair>>();
+      answer(pending);
+      component.loadRepairs(true);
+      fixture.detectChanges();
+      expect(dom().querySelector('[data-skeleton][data-kind="cards"]')).not.toBeNull();
+      expect(cards().length).toBe(0);
+      pending.next(pageOf([RECEIVED]));
+      pending.complete();
+      fixture.detectChanges();
+      expect(dom().querySelector('[data-skeleton]')).toBeNull();
+      expect(cards().length).toBe(1);
     });
   });
 
@@ -289,46 +333,213 @@ describe('RepairsComponent', () => {
   });
 
   describe('tabs and search', () => {
-    it('has a tab per step with the number of repairs in it', async () => {
+    const lastAsk = () => asked[asked.length - 1];
+
+    it('has a tab per step with the number of repairs in it, counted by the API', async () => {
       await create();
       expect(['All', 'Received', 'Fixed', 'Picked up'].map(l => tab(l).textContent!.replace(/\s+/g, ''))).toEqual(['All3', 'Received1', 'Fixed1', 'Pickedup1']);
     });
 
-    it('a tab shows only that step and is marked as the current one', async () => {
+    it('a tab asks the API for that step, shows what it sends, and is marked as the current one', async () => {
       await create();
+      answer(of(pageOf([FIXED], { meta: { counts: countsOf(ALL) } })));
       tab('Fixed').click();
       fixture.detectChanges();
+      expect(lastAsk()).toEqual({ page: 1, perPage: 10, status: 'fixed', search: '' });
       expect(devices()).toEqual(['HP Pavilion 15']);
       expect(tab('Fixed').getAttribute('aria-pressed')).toBe('true');
       expect(tab('All').getAttribute('aria-pressed')).toBe('false');
+
+      answer(of(pageOf(ALL)));
       tab('All').click();
       fixture.detectChanges();
+      expect(lastAsk()).toEqual({ page: 1, perPage: 10, search: '' });
       expect(cards().length).toBe(3);
     });
 
-    it('search finds by device, problem, customer, phone digits and Telegram', async () => {
-      await create([RECEIVED, { ...FIXED, telegram: '@sok_dara' }, PICKED_UP]);
-      search('inspiron');
-      expect(devices()).toEqual(['Dell Inspiron 15']);
-      search('keyboard');
-      expect(devices()).toEqual(['HP Pavilion 15']);
-      search('sok dara');
-      expect(devices()).toEqual(['HP Pavilion 15']);
-      search('012 345');
-      expect(devices()).toEqual(['HP Pavilion 15']);
-      search('sok_dara');
-      expect(devices()).toEqual(['HP Pavilion 15']);
-      search('fan');
-      expect(devices()).toEqual(['Asus ROG Strix G16']);
+    it('pressing the tab you are on asks nothing', async () => {
+      await create();
+      const before = asked.length;
+      tab('All').click();
+      fixture.detectChanges();
+      expect(asked.length).toBe(before);
     });
 
-    it('search and tab work together, and "No repairs found." appears when nothing matches', async () => {
+    it('the numbers of the tabs and of the top do not change with the tab or the search (the API counts them all)', async () => {
       await create();
-      tab('Received').click();
-      search('keyboard');
+      answer(of(pageOf([FIXED], { total: 1, meta: { counts: countsOf(ALL) } })));
+      tab('Fixed').click();
+      fixture.detectChanges();
+      expect(['All', 'Received', 'Fixed', 'Picked up'].map(l => tab(l).textContent!.replace(/\s+/g, ''))).toEqual(['All3', 'Received1', 'Fixed1', 'Pickedup1']);
+      expect(dom().querySelector('[data-in-shop]')!.textContent!.trim()).toBe('2');
+    });
+
+    it('typing in the search box asks the API with that text, from the first page, when the typing stops', fakeAsync(() => {
+      create().then(() => {
+        const before = asked.length;
+        search('keyboard');
+        expect(asked.length).toBe(before);                 // not yet: the person may still be typing
+        tick(299);
+        expect(asked.length).toBe(before);
+        tick(1);
+        expect(asked.length).toBe(before + 1);
+        expect(lastAsk()).toEqual({ page: 1, perPage: 10, search: 'keyboard' });
+      });
+      tick();
+    }));
+
+    it('a word typed letter by letter is ONE question, not one for each letter', fakeAsync(() => {
+      create().then(() => {
+        const before = asked.length;
+        for (const typed of ['f', 'fa', 'fan']) { search(typed); tick(100); }
+        tick(300);
+        expect(asked.length).toBe(before + 1);
+        expect(lastAsk().search).toBe('fan');
+      });
+      tick();
+    }));
+
+    it('search and tab work together, and "No repairs found." appears when nothing matches', fakeAsync(() => {
+      create().then(() => {
+        answer(of(pageOf([], { meta: { counts: countsOf(ALL) } })));
+        tab('Received').click();
+        search('keyboard');
+        tick(300);
+        fixture.detectChanges();
+        expect(lastAsk()).toEqual({ page: 1, perPage: 10, status: 'received', search: 'keyboard' });
+        expect(cards().length).toBe(0);
+        expect(text()).toContain('No repairs found.');
+        expect(text()).not.toContain('No repairs yet.');
+      });
+      tick();
+    }));
+
+    it('while the answer to a tab is coming, the grey shapes are shown', async () => {
+      await create();
+      const pending = new Subject<Paged<Repair>>();
+      answer(pending);
+      tab('Fixed').click();
+      fixture.detectChanges();
+      expect(dom().querySelector('[data-skeleton][data-kind="cards"]')).not.toBeNull();
       expect(cards().length).toBe(0);
-      expect(text()).toContain('No repairs found.');
-      expect(text()).not.toContain('No repairs yet.');
+      pending.next(pageOf([FIXED]));
+      pending.complete();
+      fixture.detectChanges();
+      expect(dom().querySelector('[data-skeleton][data-kind="cards"]')).toBeNull();
+      expect(devices()).toEqual(['HP Pavilion 15']);
+    });
+  });
+
+  describe('the pages', () => {
+    const lastAsk = () => asked[asked.length - 1];
+    const bar = () => dom().querySelector('[data-pagination]') as HTMLElement | null;
+    const barText = () => bar()!.querySelector('[data-range]')!.textContent!.replace(/\s+/g, ' ').trim();
+    const many = (rows: Repair[], over: Partial<Paged<Repair, { counts: RepairCounts }>> = {}) =>
+      pageOf(rows, { page: 1, per_page: 10, total: 25, total_pages: 3, meta: { counts: { received: 12, fixed: 8, picked_up: 5 } }, ...over });
+
+    beforeEach(() => spyOn(window, 'scrollTo'));
+
+    it('says which repairs are on screen: "Showing 1–3 of 3", with no "Per page" box and no buttons for one page', async () => {
+      await create();
+      expect(barText()).toBe('Showing 1–3 of 3');
+      expect(bar()!.querySelector('[data-per-page]')).toBeNull();
+      expect(bar()!.querySelector('[data-next]')).toBeNull();
+    });
+
+    it('with many repairs: "Showing 1–10 of 25" and Next', async () => {
+      await create();
+      answer(of(many([RECEIVED])));
+      component.loadRepairs();
+      fixture.detectChanges();
+      expect(barText()).toBe('Showing 1–10 of 25');
+      expect(bar()!.querySelector('[data-page-of]')!.textContent!.trim()).toBe('Page 1 of 3');
+    });
+
+    it('Next asks the API for the next page, shows the grey shapes meanwhile, and shows the new page', async () => {
+      await create();
+      answer(of(many([RECEIVED])));
+      component.loadRepairs();
+      fixture.detectChanges();
+
+      const pending = new Subject<Paged<Repair>>();
+      answer(pending);
+      (bar()!.querySelector('[data-next]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(lastAsk().page).toBe(2);
+      expect(dom().querySelector('[data-skeleton][data-kind="cards"]')).not.toBeNull();
+      expect(bar()).toBeNull();
+
+      pending.next(many([{ ...RECEIVED, id: 11, device: 'Second page laptop' }], { page: 2 }));
+      pending.complete();
+      fixture.detectChanges();
+      expect(devices()).toEqual(['Second page laptop']);
+      expect(barText()).toBe('Showing 11–20 of 25');
+    });
+
+    it('"Per page" asks for that many on a page, from the first page', async () => {
+      await create();
+      answer(of(many([RECEIVED], { page: 2 })));
+      component.loadRepairs();
+      fixture.detectChanges();
+      const select = bar()!.querySelector('[data-per-page]') as HTMLSelectElement;
+      select.value = '20';
+      select.dispatchEvent(new Event('change'));
+      expect(lastAsk()).toEqual(jasmine.objectContaining({ page: 1, perPage: 20 }));
+    });
+
+    it('a tab starts from the first page', async () => {
+      await create();
+      answer(of(many([RECEIVED], { page: 3 })));
+      component.loadRepairs();
+      fixture.detectChanges();
+      tab('Fixed').click();
+      expect(lastAsk().page).toBe(1);
+    });
+
+    it('after the last repair of a page is deleted, the page before it is shown (not an empty page)', async () => {
+      await create();
+      answer(of(many([RECEIVED], { page: 3, total: 21 })));
+      component.loadRepairs();
+      fixture.detectChanges();
+      buttonIn(cards()[0], 'Delete').click();
+      fixture.detectChanges();
+      const answers = [many([], { page: 3, total: 20, total_pages: 2 }), many([RECEIVED], { page: 2, total: 20, total_pages: 2 })];
+      answer(() => of(answers.shift()!));
+      buttonIn(dialog()!, 'Delete repair').click();
+      fixture.detectChanges();
+      expect(lastAsk().page).toBe(2);
+      expect(component.paging.page).toBe(2);
+      expect(cards().length).toBe(1);
+    });
+
+    it('moving a repair to its next step reads the page you are on again (you stay where you are)', async () => {
+      await create();
+      answer(of(many([RECEIVED], { page: 2 })));
+      component.loadRepairs();
+      fixture.detectChanges();
+      mainButton(cards()[0])!.click();
+      await settle();
+      expect(lastAsk().page).toBe(2);
+    });
+
+    it('a slow answer to an old question never replaces the answer to a newer one', async () => {
+      await create();
+      const slow = new Subject<Paged<Repair>>();
+      const fast = new Subject<Paged<Repair>>();
+      const queue = [slow, fast];
+      answer(() => queue.shift()!);
+      tab('Received').click();
+      tab('Fixed').click();
+      fixture.detectChanges();
+      fast.next(pageOf([FIXED]));
+      slow.next(pageOf([RECEIVED]));
+      fixture.detectChanges();
+      expect(devices()).toEqual(['HP Pavilion 15']);
+    });
+
+    it('no bar while there is nothing to page through', async () => {
+      await create([]);
+      expect(bar()).toBeNull();
     });
   });
 
@@ -343,11 +554,11 @@ describe('RepairsComponent', () => {
 
     it('"Mark fixed" sets that step on THAT repair, reloads the list and says so', async () => {
       await create();
-      const loads = repairsApi['getRepairs'].calls.count();
+      const loads = asked.length;
       mainButton(cards()[0])!.click();
       await settle();
       expect(repairsApi['updateRepair']).toHaveBeenCalledOnceWith(1, { status: 'fixed' });
-      expect(repairsApi['getRepairs'].calls.count()).toBe(loads + 1);
+      expect(asked.length).toBe(loads + 1);
       expect(text()).toContain('“Dell Inspiron 15” is fixed.');
     });
 
@@ -437,13 +648,13 @@ describe('RepairsComponent', () => {
       await create();
       buttonIn(dom(), 'New repair').click();
       await settle();
-      const loads = repairsApi['getRepairs'].calls.count();
+      const loads = asked.length;
       Object.assign(repairForm().form, { device: 'Lenovo T14', problem: 'Does not turn on' });
       repairForm().submit();
       await settle();
       expect(repairsApi['createRepair']).toHaveBeenCalledTimes(1);
       expect(formDialog()).toBeNull();
-      expect(repairsApi['getRepairs'].calls.count()).toBe(loads + 1);
+      expect(asked.length).toBe(loads + 1);
       expect(text()).toContain('Repair saved.');
       expect(editor()).toBeNull();
     });
@@ -708,13 +919,13 @@ describe('RepairsComponent', () => {
 
     it('"Delete repair" deletes THAT repair, reloads the repairs and the invoices, and says so', async () => {
       await open(1);
-      const loads = repairsApi['getRepairs'].calls.count();
+      const loads = asked.length;
       const invoiceLoads = invoicesApi['getInvoices'].calls.count();
       buttonIn(dialog()!, 'Delete repair').click();
       fixture.detectChanges();
       expect(repairsApi['deleteRepair']).toHaveBeenCalledOnceWith(2);
       expect(dialog()).toBeNull();
-      expect(repairsApi['getRepairs'].calls.count()).toBe(loads + 1);
+      expect(asked.length).toBe(loads + 1);
       expect(invoicesApi['getInvoices'].calls.count()).toBe(invoiceLoads + 1);
       expect(text()).toContain('Repair deleted.');
     });

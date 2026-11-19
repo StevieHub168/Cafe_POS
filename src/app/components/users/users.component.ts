@@ -4,22 +4,21 @@ import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { UserService } from '../../services/user.service';
 import { AuthService } from '../../services/auth.service';
-import { User } from '../../models/user.model';
-import { PageHeaderComponent } from '../ui/page-header.component';
-import { StatusBadgeComponent } from '../ui/status-badge.component';
-import { AskDialogComponent } from '../ui/ask-dialog.component';
-
-/** The shortest password the API accepts. */
-export const MIN_PASSWORD = 8;
+import { MIN_PASSWORD, User } from '../../models/user.model';
+import { PageHeaderComponent } from '../ui/page-header/page-header.component';
+import { StatusBadgeComponent } from '../ui/status-badge/status-badge.component';
+import { SkeletonComponent } from '../ui/skeleton/skeleton.component';
+import { AskDialogComponent } from '../ui/ask-dialog/ask-dialog.component';
+import { MemberFormComponent } from './member-form.component';
 
 /**
- * Admin only: the people who can sign in, and "Reset password" for each one (for someone who forgot it).
- * The person is signed out and has to sign in again with the new password.
+ * Admin only: the people who can sign in. "Add member" adds one (a drawer with the form), and "Reset password" changes the password
+ * of one (for someone who forgot it). The person is signed out and has to sign in again with the new password.
  */
 @Component({
   selector: 'app-users',
   standalone: true,
-  imports: [CommonModule, FormsModule, PageHeaderComponent, StatusBadgeComponent, AskDialogComponent],
+  imports: [CommonModule, FormsModule, PageHeaderComponent, SkeletonComponent, StatusBadgeComponent, AskDialogComponent, MemberFormComponent],
   templateUrl: './users.component.html',
 })
 export class UsersComponent implements OnInit {
@@ -28,6 +27,9 @@ export class UsersComponent implements OnInit {
   errorMessage = '';
   successMessage = '';
   private successTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** The "Add member" drawer is open. */
+  adding = false;
 
   /** The person whose password is being reset (null = the box is closed). */
   resetting: User | null = null;
@@ -58,6 +60,22 @@ export class UsersComponent implements OnInit {
   /** The signed-in admin (their own password can be changed too, and they stay signed in). */
   isMe(user: User): boolean {
     return this.authService.currentUserValue?.id === user.id;
+  }
+
+  // ---------- add a member (the form is <app-member-form>) ----------
+
+  openAdd(): void {
+    this.adding = true;
+  }
+
+  closeAdd(): void {
+    this.adding = false;
+  }
+
+  onAdded(user: User): void {
+    this.adding = false;
+    this.load();
+    this.showSuccess(`Added ${this.nameOf(user)} (${user.email}). They can sign in now.`);
   }
 
   // ---------- reset a password ----------
@@ -94,7 +112,8 @@ export class UsersComponent implements OnInit {
 
   @HostListener('document:keydown.escape')
   onEscape(): void {
-    this.cancelReset();
+    if (this.resetting) this.cancelReset();
+    else this.closeAdd();
   }
 
   private showSuccess(message: string): void {

@@ -87,6 +87,22 @@ describe('MenuComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('while the laptops load it shows the grey shapes of the cards (no spinner), then the cards', async () => {
+    await create([]);
+    const pending = new Subject<any[]>();
+    productsApi['getAllProducts'].and.returnValue(pending);
+    component.loadData();
+    fixture.detectChanges();
+    expect(dom().querySelectorAll('[data-skeleton][data-kind="product-cards"] [data-skeleton-item]').length).toBe(10);
+    expect(dom().querySelector('.animate-spin')).toBeNull();
+    expect(dom().textContent).not.toContain('No laptops');
+    pending.next([{ id: 1, sku: 'MAC-001', name: 'MacBook Air', category_id: 1, brand: 'Apple', selling_price: 999, stock_quantity: 1, min_stock_level: 0, is_archived: false }]);
+    pending.complete();
+    fixture.detectChanges();
+    expect(dom().querySelector('[data-skeleton]')).toBeNull();
+    expect(cards().length).toBe(1);
+  });
+
   describe('brand chips with logos', () => {
     const chips = () => Array.from(dom().querySelectorAll('button')).filter(b => b.querySelector('app-brand-logo')) as HTMLButtonElement[];
     const showWindows = async (brands: string[]) => {

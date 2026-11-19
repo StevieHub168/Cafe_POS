@@ -1,9 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { Subject, of, throwError } from 'rxjs';
+import { Observable, Subject, of, throwError } from 'rxjs';
 import { UsersComponent } from './users.component';
 import { UserService } from '../../services/user.service';
 import { AuthService } from '../../services/auth.service';
-import { User } from '../../models/user.model';
+import { CreatedUser, User } from '../../models/user.model';
 
 const user = (id: number, username: string, over: Partial<User> = {}): User => ({
   id, username, email: `${username}@laptopshop.com`, full_name: username, role: 'staff', ...over,
@@ -15,17 +15,23 @@ describe('UsersComponent (admin: reset a password)', () => {
   let fixture: ComponentFixture<UsersComponent>;
   let component: UsersComponent;
   let api: { [k: string]: jasmine.Spy };
+  let authApi: { currentUserValue: User; createUser: jasmine.Spy };
 
-  async function open(list: User[] | Error = USERS): Promise<void> {
+  async function open(list: User[] | Error | Subject<User[]> = USERS): Promise<void> {
     api = {
-      getUsers: jasmine.createSpy('getUsers').and.returnValue(list instanceof Error ? throwError(() => ({ error: { error: list.message } })) : of(list)),
+      getUsers: jasmine.createSpy('getUsers').and.returnValue(list instanceof Subject ? list : list instanceof Error ? throwError(() => ({ error: { error: list.message } })) : of(list)),
       resetPassword: jasmine.createSpy('resetPassword').and.returnValue(of({ message: 'Password changed' })),
+    };
+    authApi = {
+      currentUserValue: ADMIN,
+      createUser: jasmine.createSpy('createUser').and.callFake((data: any): Observable<CreatedUser> =>
+        of({ user: user(9, data.email.split('@')[0], { email: data.email, full_name: data.full_name ?? data.email.split('@')[0], role: data.role }), token: 'their-own-token' })),
     };
     await TestBed.configureTestingModule({
       imports: [UsersComponent],
       providers: [
         { provide: UserService, useValue: api },
-        { provide: AuthService, useValue: { currentUserValue: ADMIN } },
+        { provide: AuthService, useValue: authApi },
       ],
     }).compileComponents();
     fixture = TestBed.createComponent(UsersComponent);
@@ -43,6 +49,123 @@ describe('UsersComponent (admin: reset a password)', () => {
   const type = (value: string) => { box().value = value; box().dispatchEvent(new Event('input')); fixture.detectChanges(); };
   const dialogButton = (label: string) => Array.from(dialog()!.querySelectorAll('button')).find(b => b.textContent!.trim() === label) as HTMLButtonElement;
   const settle = async () => { for (let i = 0; i < 4; i++) await Promise.resolve(); fixture.detectChanges(); };
+
+  it('while the list loads it shows the grey shapes of the people (no "Loading..." text), then the people', async () => {
+    const pending = new Subject<User[]>();
+    await open(pending);
+    expect(dom().querySelectorAll('[data-skeleton][data-kind="users"] [data-skeleton-item]').length).toBe(4);
+    expect(text()).not.toContain('Loading...');
+    expect(text()).not.toContain('No users');
+    pending.next(USERS);
+    pending.complete();
+    fixture.detectChanges();
+    expect(dom().querySelector('[data-skeleton]')).toBeNull();
+    expect(cards().length).toBe(3);
+  });
+
+  describe('Add member', () => {
+    const addButton = () => dom().querySelector('[data-action="add"]') as HTMLButtonElement;
+    const drawer = () => dom().querySelector('[role="dialog"][aria-label="Add member"]') as HTMLElement | null;
+    const typeIn = (id: string, value: string) => { const box = dom().querySelector(`#${id}`) as HTMLInputElement; box.value = value; box.dispatchEvent(new Event('input')); fixture.detectChanges(); };
+    const submitForm = () => { (drawer()!.querySelector('button[type="submit"]') as HTMLButtonElement).click(); fixture.detectChanges(); };
+    const press = (key: string) => { document.dispatchEvent(new KeyboardEvent('keydown', { key })); fixture.detectChanges(); };
+
+    it('has an "Add member" button in the header', async () => {
+      await open();
+      expect(dom().querySelector('app-page-header [data-action="add"]')).not.toBeNull();
+      expect(addButton().textContent!.trim()).toBe('Add member');
+      expect(drawer()).toBeNull();
+    });
+
+    it('the button opens a panel from the right edge with the form in it', async () => {
+      await open();
+      addButton().click();
+      fixture.detectChanges();
+      expect(drawer()).not.toBeNull();
+      expect(drawer()!.classList).toContain('drawer-panel');
+      expect(drawer()!.querySelector('app-member-form')).not.toBeNull();
+      expect(drawer()!.querySelector('h2')!.textContent).toContain('Add member');
+    });
+
+    it('the X, Cancel, the dark area and Esc close it; a click inside the panel does not', async () => {
+      await open();
+      const reopen = () => { if (!drawer()) { addButton().click(); fixture.detectChanges(); } };
+
+      addButton().click(); fixture.detectChanges();
+      (drawer()!.querySelector('button[aria-label="Close"]') as HTMLButtonElement).click(); fixture.detectChanges();
+      expect(drawer()).toBeNull();
+
+      reopen();
+      (Array.from(drawer()!.querySelectorAll('button')).find(b => b.textContent!.trim() === 'Cancel') as HTMLButtonElement).click(); fixture.detectChanges();
+      expect(drawer()).toBeNull();
+
+      reopen();
+      drawer()!.click(); fixture.detectChanges();
+      expect(drawer()).not.toBeNull();                                   // inside the panel: stays open
+      (dom().querySelector('.drawer-backdrop') as HTMLElement).click(); fixture.detectChanges();
+      expect(drawer()).toBeNull();
+
+      reopen();
+      press('Escape');
+      expect(drawer()).toBeNull();
+    });
+
+    it('adding a member closes the panel, says so, and shows them in the list (the list is read again)', async () => {
+      await open();
+      addButton().click(); fixture.detectChanges();
+      await settle();                                                    // the form wires its boxes a moment after it appears
+      const loadsBefore = api['getUsers'].calls.count();
+      api['getUsers'].and.returnValue(of([...USERS, user(9, 'mony', { email: 'mony@gmail.com', full_name: 'Mony' })]));
+      typeIn('m-name', 'Mony');
+      typeIn('m-email', 'mony@gmail.com');
+      typeIn('m-password', 'Thastore@1234');
+      submitForm();
+      await settle();
+      expect(authApi.createUser).toHaveBeenCalledOnceWith({ email: 'mony@gmail.com', password: 'Thastore@1234', role: 'staff', full_name: 'Mony' });
+      expect(drawer()).toBeNull();
+      expect(text()).toContain('Added Mony (mony@gmail.com). They can sign in now.');
+      expect(api['getUsers'].calls.count()).toBe(loadsBefore + 1);
+      expect(names()).toContain('Mony');
+      expect(cards().length).toBe(4);
+    });
+
+    it('a new admin is added as an admin and shows with the Admin badge', async () => {
+      await open();
+      addButton().click(); fixture.detectChanges();
+      await settle();
+      api['getUsers'].and.returnValue(of([...USERS, user(9, 'boss', { email: 'boss@gmail.com', full_name: 'The Boss', role: 'admin' })]));
+      typeIn('m-email', 'boss@gmail.com');
+      typeIn('m-password', 'Leap@1234');
+      (drawer()!.querySelector('[role="radio"]:nth-child(2)') as HTMLButtonElement).click(); fixture.detectChanges();
+      submitForm();
+      await settle();
+      expect(authApi.createUser.calls.mostRecent().args[0].role).toBe('admin');
+      const boss = cards().find(c => c.textContent!.includes('The Boss'))!;
+      expect(boss.textContent).toContain('Admin');
+    });
+
+    it('when the API says no the panel stays open with the reason, and the list is not read again', async () => {
+      await open();
+      addButton().click(); fixture.detectChanges();
+      await settle();
+      authApi.createUser.and.returnValue(throwError(() => new Error('Email already registered')));
+      const loadsBefore = api['getUsers'].calls.count();
+      typeIn('m-email', 'admin@laptopshop.com');
+      typeIn('m-password', 'Thastore@1234');
+      submitForm();
+      expect(drawer()).not.toBeNull();
+      expect(drawer()!.textContent).toContain('Email already registered');
+      expect(api['getUsers'].calls.count()).toBe(loadsBefore);
+    });
+
+    it('Esc closes the reset box first, and does not close a panel that is not there', async () => {
+      await open();
+      (cards()[0].querySelector('[data-action="reset"]') as HTMLButtonElement).click(); fixture.detectChanges();
+      expect(dialog()).not.toBeNull();
+      press('Escape');
+      expect(dialog()).toBeNull();
+    });
+  });
 
   it('lists everyone as a card: name, email and role; admins first, then A-Z', async () => {
     await open();

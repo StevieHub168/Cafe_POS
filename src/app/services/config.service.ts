@@ -2,21 +2,20 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, catchError, map, of, shareReplay } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { AuthService } from './auth.service';
 
 /** Settings the API holds (in its .env). */
 @Injectable({ providedIn: 'root' })
 export class ConfigService {
   private publicUrl$?: Observable<string>;
 
-  constructor(private http: HttpClient, private authService: AuthService) { }
+  constructor(private http: HttpClient) { }
 
   /**
    * The address the QR codes open ("" = the shop did not set it yet: the address this page is open on is used then). It is read once.
    * If the API cannot answer, "" too: a QR can still be made.
    */
   publicUrl(): Observable<string> {
-    this.publicUrl$ ??= this.http.get<{ publicUrl: string }>(`${environment.apiUrl}/config`, { headers: this.authService.getAuthHeaders() }).pipe(
+    this.publicUrl$ ??= this.http.get<{ publicUrl: string }>(`${environment.apiUrl}/config`).pipe(
       map(config => config.publicUrl || ''),
       catchError(() => of('')),
       shareReplay(1)

@@ -1,49 +1,64 @@
-import { Component, HostListener, OnInit } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { finalize } from 'rxjs';
+import { Subscription, finalize } from 'rxjs';
 import { InvoiceService } from '../../services/invoice.service';
 import { ProductService } from '../../services/product.service';
 import { Invoice, formatInvoiceNumber } from '../../models/invoice.model';
 import { Product } from '../../models/product.model';
+import { SalesCounts } from '../../models/paged.model';
 import { Repair } from '../../models/repair.model';
-import { PageHeaderComponent } from '../ui/page-header.component';
-import { StatusBadgeComponent } from '../ui/status-badge.component';
-import { ConfirmDialogComponent } from '../ui/confirm-dialog.component';
+import { PageHeaderComponent } from '../ui/page-header/page-header.component';
+import { PaginationComponent } from '../ui/pagination/pagination.component';
+import { SkeletonComponent } from '../ui/skeleton/skeleton.component';
+import { StatusBadgeComponent } from '../ui/status-badge/status-badge.component';
+import { ConfirmDialogComponent } from '../ui/confirm-dialog/confirm-dialog.component';
 import { InvoiceEditorComponent } from '../invoices/invoice-editor.component';
 import { InvoiceViewerComponent } from '../invoices/invoice-viewer.component';
 import { InvoiceSaved } from '../invoices/invoice-form.component';
 import { RepairFormComponent, RepairSaved } from '../repairs/repair-form.component';
 import { ImgSrcPipe } from '../../pipes/img-src.pipe';
 import { buildInvoicePhotos } from '../../utils/invoice-photo';
+import { PageState, pageAfterShrink } from '../../utils/page-state';
 import { repairPrefillFromSale } from '../../utils/invoice-prefill';
-import { isUnderWarranty, warrantyText } from '../../utils/warranty';
+import { warrantyText } from '../../utils/warranty';
 import { formatDate, todayIso } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import { TelegramNotifier } from '../../services/telegram-notifier.service';
 
 type Filter = 'all' | 'month' | 'warranty';
 
+/** How long after the last key the search is sent (so a word being typed is one request, not one per letter). */
+const SEARCH_DELAY_MS = 300;
+
 /**
  * The Sales page: the laptops the shop sold, each as a card with its photo and its invoice (the paper). A sale IS its
  * invoice, so "New sale" writes the invoice; "Repair" starts a repair job for a laptop that was sold (a warranty repair).
+ * The list comes in PAGES from the API, already narrowed by the tab and the search (so it stays fast with thousands of sales).
  */
 @Component({
   selector: 'app-sales',
   standalone: true,
-  imports: [CommonModule, FormsModule, PageHeaderComponent, StatusBadgeComponent, ConfirmDialogComponent, InvoiceEditorComponent, InvoiceViewerComponent, RepairFormComponent, ImgSrcPipe],
+  imports: [CommonModule, FormsModule, PageHeaderComponent, StatusBadgeComponent, ConfirmDialogComponent, InvoiceEditorComponent, InvoiceViewerComponent, RepairFormComponent, SkeletonComponent, PaginationComponent, ImgSrcPipe],
   templateUrl: './sales.component.html'
 })
-export class SalesComponent implements OnInit {
-  /** The sale invoices, newest first. */
+export class SalesComponent implements OnInit, OnDestroy {
+  /** The sales of the page on screen, newest first. */
   sales: Invoice[] = [];
+  /** Where the list is: which page, how many on a page, how many sales match in all. */
+  readonly paging = new PageState(10);
+  /** The numbers of the tabs and of the boxes on top (not narrowed by the search). null until the first answer. */
+  counts: SalesCounts | null = null;
   /** The shop's laptops still for sale: offered while an invoice is written, and in the "A laptop of my shop" list. */
   products: Product[] = [];
   /** ALL products, sold ones too: only used to find the photo of what was sold. */
   private allProducts: Product[] = [];
   private photos = new Map<number, string>();
+  /** The grey shapes are shown: the first load, and every new page, tab or search. (After a save the list is read again quietly.) */
   isLoading = true;
+  private loading?: Subscription;
+  private searchTimer: ReturnType<typeof setTimeout> | undefined;
   errorMessage = '';
 
   successMessage = '';
@@ -74,7 +89,7 @@ export class SalesComponent implements OnInit {
   ) { }
 
   ngOnInit(): void {
-    this.loadSales();
+    this.loadSales(true);
     // For suggestions and for the photos: if this fails, sales still work (plain boxes, grey photo boxes).
     this.productService.getAllProducts(true).subscribe({
       next: (products) => {
@@ -88,6 +103,12 @@ export class SalesComponent implements OnInit {
         this.findPhotos();
       }
     });
+  }
+
+  ngOnDestroy(): void {
+    clearTimeout(this.searchTimer);
+    clearTimeout(this.successTimer);
+    this.loading?.unsubscribe();
   }
 
   /** Today. A method of its own so a test can pretend it is another day. */
@@ -107,10 +128,22 @@ export class SalesComponent implements OnInit {
 
   // ---------- list ----------
 
-  loadSales(): void {
-    this.invoiceService.getInvoices('sale').subscribe({
-      next: (sales) => {
-        this.sales = sales;
+  /** Reads the page on screen again. `withShapes`: show the grey shapes meanwhile (a new page, tab or search). */
+  loadSales(withShapes = false): void {
+    if (withShapes) this.isLoading = true;
+    this.loading?.unsubscribe();       // a slow answer to an older question must never replace a newer one
+    this.loading = this.invoiceService.getInvoicePage(this.paging, { type: 'sale', period: this.filter === 'all' ? undefined : this.filter, search: this.searchQuery }).subscribe({
+      next: (answer) => {
+        // The last sale of this page was deleted: go back to the last page that has sales.
+        const back = pageAfterShrink(this.paging.page, answer);
+        if (back !== null) {
+          this.paging.page = back;
+          this.loadSales(withShapes);
+          return;
+        }
+        this.sales = answer.results;
+        this.paging.take(answer);
+        this.counts = answer.meta?.counts ?? this.counts;
         this.isLoading = false;
         this.findPhotos();
       },
@@ -121,38 +154,41 @@ export class SalesComponent implements OnInit {
     });
   }
 
+  /** A tab: the first page of that tab. */
+  setFilter(filter: Filter): void {
+    if (this.filter === filter) return;
+    this.filter = filter;
+    this.paging.first();
+    this.loadSales(true);
+  }
+
+  /** Something was typed in the search box: it is sent when the typing stops. */
+  onSearch(): void {
+    clearTimeout(this.searchTimer);
+    this.searchTimer = setTimeout(() => {
+      this.paging.first();
+      this.loadSales(true);
+    }, SEARCH_DELAY_MS);
+  }
+
+  goToPage(page: number): void {
+    this.paging.page = page;
+    this.loadSales(true);
+  }
+
+  changePageSize(size: number): void {
+    this.paging.perPage = size;
+    this.paging.first();
+    this.loadSales(true);
+  }
+
   private findPhotos(): void {
     this.photos = buildInvoicePhotos(this.sales, this.allProducts, []);
   }
 
-  private isThisMonth(sale: Invoice): boolean {
-    return sale.invoice_date.slice(0, 7) === this.today.slice(0, 7);
-  }
-
-  private isUnderWarranty(sale: Invoice): boolean {
-    return isUnderWarranty(sale.invoice_date, sale.warranty, this.now());
-  }
-
+  /** How many sales are in a tab (the API counts them: it knows them all, the page only has a few). */
   countFor(filter: Filter): number {
-    return filter === 'all' ? this.sales.length : filter === 'month' ? this.sales.filter(s => this.isThisMonth(s)).length : this.sales.filter(s => this.isUnderWarranty(s)).length;
-  }
-
-  get visibleSales(): Invoice[] {
-    const q = this.searchQuery.trim().toLowerCase();
-    const digits = q.replace(/\D/g, '');
-    const onlyDigits = /^\d+$/.test(q);
-    return this.sales.filter(sale => {
-      if (this.filter === 'month' && !this.isThisMonth(sale)) return false;
-      if (this.filter === 'warranty' && !this.isUnderWarranty(sale)) return false;
-      if (!q) return true;
-      // "44" or "000044" finds invoice 000044 (and a phone number can be found by its digits).
-      return (onlyDigits && formatInvoiceNumber(sale.number).includes(q))
-        || (sale.customer_name ?? '').toLowerCase().includes(q)
-        || (sale.telegram ?? '').toLowerCase().includes(q)
-        || (sale.phone ?? '').toLowerCase().includes(q)
-        || (digits.length >= 3 && (sale.phone ?? '').replace(/\D/g, '').includes(digits))
-        || sale.items.some(item => item.name.toLowerCase().includes(q));
-    });
+    return this.counts ? this.counts[filter === 'all' ? 'all' : filter] : 0;
   }
 
   trackById = (_: number, sale: Invoice) => sale.id;
@@ -222,6 +258,7 @@ export class SalesComponent implements OnInit {
   onSaved(result: InvoiceSaved): void {
     this.editing = null;
     this.viewing = result.invoice;
+    if (result.created) this.paging.first();      // the newest sale is the first one of the first page
     this.loadSales();
     this.showSuccess(`Sale ${formatInvoiceNumber(result.invoice.number)} ${result.created ? 'saved' : 'changed'}.`);
     if (result.created) this.telegram.send('sold', result.invoice.id, result.invoice);   // a NEW sale goes to the Sold group (a change does not)

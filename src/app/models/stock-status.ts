@@ -1,5 +1,5 @@
 import { Product } from './product.model';
-import { StatusTone } from '../components/ui/status-badge.component';
+import { StatusTone } from '../components/ui/status-badge/status-badge.component';
 
 export interface StockInfo {
   text: string;

@@ -1,8 +1,8 @@
 import { ScanActionService } from '../../services/scan-action.service';
 import { environment } from '../../../environments/environment';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { Subject, of, throwError } from 'rxjs';
+import { Observable, Subject, of, throwError } from 'rxjs';
 import { BookingsComponent } from './bookings.component';
 import { BookingFormComponent } from './booking-form.component';
 import { InvoiceFormComponent } from '../invoices/invoice-form.component';
@@ -13,6 +13,7 @@ import { InvoiceService } from '../../services/invoice.service';
 import { ShareService } from '../../services/share.service';
 import { BookingPickupComponent } from './booking-pickup.component';
 import { Booking } from '../../models/booking.model';
+import { BookingCounts, Paged } from '../../models/paged.model';
 import { Invoice } from '../../models/invoice.model';
 import { Product } from '../../models/product.model';
 import { TelegramNotifier } from '../../services/telegram-notifier.service';
@@ -31,6 +32,15 @@ const EXAMPLE: Booking = {
 };
 
 const booking = (over: Partial<Booking> = {}): Booking => ({ ...EXAMPLE, ...over });
+
+/** What the API sends for a page: the rows, where they are in the list, and how many bookings are in each status. */
+const countsOf = (rows: Booking[]): BookingCounts => ({
+  booked: rows.filter(b => b.status === 'booked').length,
+  picked_up: rows.filter(b => b.status === 'picked_up').length,
+  cancelled: rows.filter(b => b.status === 'cancelled').length,
+});
+const pageOf = (rows: Booking[], over: Partial<Paged<Booking, { counts: BookingCounts }>> = {}): Paged<Booking, { counts: BookingCounts }> =>
+  ({ page: 1, per_page: 10, total: rows.length, total_pages: 1, results: rows, meta: { counts: countsOf(rows) }, ...over });
 const product = (over: Partial<Product> = {}): Product => ({
   id: 7, sku: 'MAC-901', name: 'MacBook Air M5', category_id: 1, brand: 'Apple', model: '', selling_price: 999,
   extra_prices: [], stock_quantity: 1, min_stock_level: 0, is_archived: false, image_url: '/uploads/air.png', ...over,
@@ -47,12 +57,27 @@ describe('BookingsComponent', () => {
   let productsApi: { [k: string]: jasmine.Spy };
   let invoicesApi: { [k: string]: jasmine.Spy };
   let sharingApi: { [k: string]: jasmine.Spy };
+  /** Every question the page asked the API, as it was when it was asked (page, size, tab, search). */
+  let asked: { page: number; perPage: number; status?: string; excludeStatus?: string; search?: string }[];
+  /** What the API answers from now on: an answer, or a function that makes one for each question. */
+  const answer = (value: Observable<Paged<Booking>> | (() => Observable<Paged<Booking>>)) =>
+    bookingsApi['getBookingPage'].and.callFake((state: { page: number; perPage: number }, filters: object) => {
+      asked.push({ page: state.page, perPage: state.perPage, ...filters });
+      return typeof value === 'function' ? value() : value;
+    });
 
-  /** `beforeStart` runs before the page is made (a request from the scan screen is already waiting when Bookings opens). */
+  /** `beforeStart` runs before the page is made (a request from the scan screen is already waiting when Bookings opens).
+   *  `list` = every booking that exists; `onPage` = the ones the first page shows (all of them, unless a test says otherwise). */
   // (By default the shop has the laptop of the example, with its photo: a booking for it goes to Telegram with the picture.)
-  async function create(list: Booking[] = [EXAMPLE], catalogue: Product[] = [product()], invoices: Invoice[] = [], beforeStart?: (scan: ScanActionService) => void): Promise<void> {
+  async function create(list: Booking[] = [EXAMPLE], catalogue: Product[] = [product()], invoices: Invoice[] = [], beforeStart?: (scan: ScanActionService) => void, onPage: Booking[] = list): Promise<void> {
+    asked = [];
     bookingsApi = {
-      getBookings: jasmine.createSpy('getBookings').and.returnValue(of(list)),
+      getBookingPage: jasmine.createSpy('getBookingPage'),
+      // A booking read by its number (a scanned laptop): any of the list, or "not found".
+      getBooking: jasmine.createSpy('getBooking').and.callFake((id: number) => {
+        const found = list.find(b => b.id === id);
+        return found ? of(found) : throwError(() => ({ status: 404, error: { error: 'Booking not found' } }));
+      }),
       createBooking: jasmine.createSpy('createBooking').and.callFake((b: any) => of({ id: 99, remaining_balance: b.full_price - b.deposit, ...b })),
       updateBooking: jasmine.createSpy('updateBooking').and.callFake((id: number, c: any) => of({ ...EXAMPLE, ...c, id })),
       deleteBooking: jasmine.createSpy('deleteBooking').and.returnValue(of({ message: 'ok' })),
@@ -64,6 +89,7 @@ describe('BookingsComponent', () => {
         laptop: 'hidden',
       })),
     };
+    answer(of(pageOf(onPage)));
     invoicesApi = {
       getInvoices: jasmine.createSpy('getInvoices').and.returnValue(of(invoices)),
       getNextNumber: jasmine.createSpy('getNextNumber').and.returnValue(of(44)),
@@ -131,6 +157,44 @@ describe('BookingsComponent', () => {
 
   // ---------------------------------------------------------------------------------------------
   describe('the list', () => {
+    it('asks for the first page of the bookings that are not picked up (those became Sales), 10 on a page', async () => {
+      await create();
+      expect(asked).toEqual([{ page: 1, perPage: 10, excludeStatus: 'picked_up', search: '' }]);
+    });
+
+    it('while loading it shows the grey shapes of the cards and of the number, not "No bookings yet."', async () => {
+      await create();
+      const pending = new Subject<Paged<Booking>>();
+      answer(pending);
+      component.loadBookings(true);
+      fixture.detectChanges();
+      expect(dom().querySelectorAll('[data-skeleton][data-kind="cards"] [data-skeleton-item]').length).toBe(4);
+      expect(dom().querySelector('[data-pagination]')).toBeNull();
+      expect(text()).not.toContain('No bookings yet.');
+      pending.next(pageOf([EXAMPLE]));
+      pending.complete();
+      fixture.detectChanges();
+      expect(dom().querySelector('[data-skeleton]')).toBeNull();
+      expect(cards().length).toBe(1);
+    });
+
+    it('the number on top is grey until the API has counted', async () => {
+      await TestBed.configureTestingModule({
+        imports: [BookingsComponent],
+        providers: [
+          { provide: BookingService, useValue: { getBookingPage: () => new Subject<Paged<Booking>>(), getBooking: () => of(EXAMPLE) } },
+          { provide: ProductService, useValue: { getAllProducts: () => of([]) } },
+          { provide: InvoiceService, useValue: { getInvoices: () => of([]) } },
+          { provide: TelegramNotifier, useValue: telegramApi },
+          { provide: ShareService, useValue: {} },
+        ],
+      }).compileComponents();
+      fixture = TestBed.createComponent(BookingsComponent);
+      fixture.detectChanges();
+      expect(dom().querySelector('[data-skeleton][data-kind="stats"] [data-skeleton-item]')).not.toBeNull();
+      expect(dom().querySelector('[data-summary]')).toBeNull();
+    });
+
     it('shows each booking as a card with everything from the message', async () => {
       await create();
       const card = cards()[0];
@@ -197,7 +261,7 @@ describe('BookingsComponent', () => {
 
     it('shows the reason when the bookings cannot be loaded', async () => {
       await create();
-      bookingsApi['getBookings'].and.returnValue(throwError(() => ({ error: { error: 'Database is down' } })));
+      answer(throwError(() => ({ error: { error: 'Database is down' } })));
       component.loadBookings();
       fixture.detectChanges();
       expect(text()).toContain('Database is down');
@@ -211,58 +275,242 @@ describe('BookingsComponent', () => {
         booking({ id: 4, product_name: 'MSI Cyborg', status: 'cancelled' }),
       ];
       const tab = (label: string) => Array.from(dom().querySelectorAll('[role="group"] button')).find(b => b.textContent!.trim().startsWith(label)) as HTMLButtonElement;
+      const lastAsk = () => asked[asked.length - 1];
+      const names = () => cards().map(c => c.querySelector('h3')!.textContent!.trim());
 
-      it('has a tab per status with the number of bookings in it (no "Picked up": that became a Sale)', async () => {
+      it('has a tab per status with the number of bookings in it, counted by the API (no "Picked up": that became a Sale)', async () => {
         await create(list());
         expect(['All', 'Booked', 'Cancelled'].map(l => tab(l).textContent!.replace(/\s+/g, '')))
           .toEqual(['All4', 'Booked2', 'Cancelled2']);
         expect(tab('Picked up')).toBeUndefined();
       });
 
-      it('a picked-up booking (it became a Sale) is not in the list, and is not counted', async () => {
-        await create([...list(), booking({ id: 5, product_name: 'HP Victus 16', status: 'picked_up', sale_invoice_id: 77, sale_invoice_number: 36 })]);
-        expect(cards().map(c => c.querySelector('h3')!.textContent!.trim())).not.toContain('HP Victus 16');
-        expect(cards().length).toBe(4);
+      it('"All" is the booked and the cancelled ones: a picked-up booking (it became a Sale) is not asked for, and is not counted', async () => {
+        await create();
+        answer(of(pageOf(list(), { meta: { counts: { booked: 2, cancelled: 2, picked_up: 7 } } })));
+        component.loadBookings();
+        fixture.detectChanges();
+        expect(lastAsk().excludeStatus).toBe('picked_up');
+        expect(lastAsk().status).toBeUndefined();
         expect(tab('All').textContent!.replace(/\s+/g, '')).toBe('All4');
         expect(text()).not.toContain('Became Sale');
       });
 
-      it('a tab shows only that status, and is marked as the current one', async () => {
+      it('a tab asks the API for that status, shows what it sends, and is marked as the current one', async () => {
         await create(list());
-        expect(cards().length).toBe(4);
+        answer(of(pageOf(list().slice(0, 2), { meta: { counts: countsOf(list()) } })));
         tab('Booked').click();
         fixture.detectChanges();
-        expect(cards().length).toBe(2);
+        expect(lastAsk()).toEqual({ page: 1, perPage: 10, status: 'booked', search: '' });
+        expect(names()).toEqual(['MacBook Air M5', 'Dell XPS 13']);
         expect(tab('Booked').getAttribute('aria-pressed')).toBe('true');
         expect(tab('All').getAttribute('aria-pressed')).toBe('false');
+
+        answer(of(pageOf(list().slice(2), { meta: { counts: countsOf(list()) } })));
         tab('Cancelled').click();
         fixture.detectChanges();
-        expect(cards().map(c => c.querySelector('h3')!.textContent!.trim())).toEqual(['Asus TUF A15', 'MSI Cyborg']);
+        expect(lastAsk().status).toBe('cancelled');
+        expect(names()).toEqual(['Asus TUF A15', 'MSI Cyborg']);
+
+        answer(of(pageOf(list())));
         tab('All').click();
         fixture.detectChanges();
+        expect(lastAsk()).toEqual({ page: 1, perPage: 10, excludeStatus: 'picked_up', search: '' });
         expect(cards().length).toBe(4);
       });
 
-      it('search finds by product, Telegram or phone (digits only is fine)', async () => {
+      it('pressing the tab you are on asks nothing', async () => {
         await create(list());
-        const names = () => cards().map(c => c.querySelector('h3')!.textContent!.trim());
-        type('input[aria-label="Search bookings"]', 'xps');
-        expect(names()).toEqual(['Dell XPS 13']);
-        type('input[aria-label="Search bookings"]', 'dell_fan');
-        expect(names()).toEqual(['Dell XPS 13']);
-        type('input[aria-label="Search bookings"]', '099111');
-        expect(names()).toEqual(['Asus TUF A15']);
-        type('input[aria-label="Search bookings"]', '012 345');
-        expect(names()).toEqual(['Dell XPS 13']);
+        const before = asked.length;
+        tab('All').click();
+        fixture.detectChanges();
+        expect(asked.length).toBe(before);
       });
 
-      it('search and tab work together, and "No bookings found." appears when nothing matches', async () => {
+      it('the numbers of the tabs do not change with the tab or the search (the API counts them all)', async () => {
         await create(list());
+        answer(of(pageOf([list()[2]], { total: 1, meta: { counts: countsOf(list()) } })));
         tab('Cancelled').click();
-        type('input[aria-label="Search bookings"]', 'xps');
+        fixture.detectChanges();
+        expect(['All', 'Booked', 'Cancelled'].map(l => tab(l).textContent!.replace(/\s+/g, ''))).toEqual(['All4', 'Booked2', 'Cancelled2']);
+      });
+
+      it('typing in the search box asks the API with that text, from the first page, when the typing stops', fakeAsync(() => {
+        create(list()).then(() => {
+          const before = asked.length;
+          type('input[aria-label="Search bookings"]', 'xps');
+          expect(asked.length).toBe(before);                 // not yet: the person may still be typing
+          tick(299);
+          expect(asked.length).toBe(before);
+          tick(1);
+          expect(asked.length).toBe(before + 1);
+          expect(lastAsk()).toEqual({ page: 1, perPage: 10, excludeStatus: 'picked_up', search: 'xps' });
+        });
+        tick();
+      }));
+
+      it('a word typed letter by letter is ONE question, not one for each letter', fakeAsync(() => {
+        create(list()).then(() => {
+          const before = asked.length;
+          for (const typed of ['d', 'de', 'del', 'dell']) { type('input[aria-label="Search bookings"]', typed); tick(100); }
+          tick(300);
+          expect(asked.length).toBe(before + 1);
+          expect(lastAsk().search).toBe('dell');
+        });
+        tick();
+      }));
+
+      it('search and tab work together, and "No bookings found." appears when nothing matches', fakeAsync(() => {
+        create(list()).then(() => {
+          answer(of(pageOf([], { meta: { counts: countsOf(list()) } })));
+          tab('Cancelled').click();
+          type('input[aria-label="Search bookings"]', 'xps');
+          tick(300);
+          fixture.detectChanges();
+          expect(lastAsk()).toEqual({ page: 1, perPage: 10, status: 'cancelled', search: 'xps' });
+          expect(cards().length).toBe(0);
+          expect(text()).toContain('No bookings found.');
+          expect(text()).not.toContain('No bookings yet.');
+        });
+        tick();
+      }));
+
+      it('while the answer to a tab is coming, the grey shapes are shown', async () => {
+        await create(list());
+        const pending = new Subject<Paged<Booking>>();
+        answer(pending);
+        tab('Booked').click();
+        fixture.detectChanges();
+        expect(dom().querySelector('[data-skeleton][data-kind="cards"]')).not.toBeNull();
         expect(cards().length).toBe(0);
-        expect(text()).toContain('No bookings found.');
-        expect(text()).not.toContain('No bookings yet.');
+        pending.next(pageOf(list().slice(0, 2)));
+        pending.complete();
+        fixture.detectChanges();
+        expect(dom().querySelector('[data-skeleton][data-kind="cards"]')).toBeNull();
+        expect(names()).toEqual(['MacBook Air M5', 'Dell XPS 13']);
+      });
+    });
+
+    describe('the pages', () => {
+      const lastAsk = () => asked[asked.length - 1];
+      const bar = () => dom().querySelector('[data-pagination]') as HTMLElement | null;
+      const barText = () => bar()!.querySelector('[data-range]')!.textContent!.replace(/\s+/g, ' ').trim();
+      const many = (rows: Booking[], over: Partial<Paged<Booking, { counts: BookingCounts }>> = {}) =>
+        pageOf(rows, { page: 1, per_page: 10, total: 25, total_pages: 3, meta: { counts: { booked: 20, cancelled: 5, picked_up: 2 } }, ...over });
+      const tab = (label: string) => Array.from(dom().querySelectorAll('[role="group"] button')).find(b => b.textContent!.trim().startsWith(label)) as HTMLButtonElement;
+
+      beforeEach(() => spyOn(window, 'scrollTo'));
+
+      it('says which bookings are on screen: "Showing 1–1 of 1", with no "Per page" box and no buttons for one page', async () => {
+        await create();
+        expect(barText()).toBe('Showing 1–1 of 1');
+        expect(bar()!.querySelector('[data-per-page]')).toBeNull();
+        expect(bar()!.querySelector('[data-next]')).toBeNull();
+      });
+
+      it('with many bookings: "Showing 1–10 of 25" and Next', async () => {
+        await create();
+        answer(of(many([EXAMPLE])));
+        component.loadBookings();
+        fixture.detectChanges();
+        expect(barText()).toBe('Showing 1–10 of 25');
+        expect(bar()!.querySelector('[data-page-of]')!.textContent!.trim()).toBe('Page 1 of 3');
+      });
+
+      it('Next asks the API for the next page, shows the grey shapes meanwhile, and shows the new page', async () => {
+        await create();
+        answer(of(many([EXAMPLE])));
+        component.loadBookings();
+        fixture.detectChanges();
+
+        const pending = new Subject<Paged<Booking>>();
+        answer(pending);
+        (bar()!.querySelector('[data-next]') as HTMLButtonElement).click();
+        fixture.detectChanges();
+        expect(lastAsk().page).toBe(2);
+        expect(dom().querySelector('[data-skeleton][data-kind="cards"]')).not.toBeNull();
+        expect(bar()).toBeNull();
+
+        pending.next(many([booking({ id: 11, product_name: 'Second page laptop' })], { page: 2 }));
+        pending.complete();
+        fixture.detectChanges();
+        expect(cards().map(c => c.querySelector('h3')!.textContent!.trim())).toEqual(['Second page laptop']);
+        expect(barText()).toBe('Showing 11–20 of 25');
+      });
+
+      it('"Per page" asks for that many on a page, from the first page', async () => {
+        await create();
+        answer(of(many([EXAMPLE], { page: 2 })));
+        component.loadBookings();
+        fixture.detectChanges();
+        const select = bar()!.querySelector('[data-per-page]') as HTMLSelectElement;
+        select.value = '20';
+        select.dispatchEvent(new Event('change'));
+        expect(lastAsk()).toEqual(jasmine.objectContaining({ page: 1, perPage: 20 }));
+      });
+
+      it('a tab starts from the first page', async () => {
+        await create();
+        answer(of(many([EXAMPLE], { page: 3 })));
+        component.loadBookings();
+        fixture.detectChanges();
+        tab('Booked').click();
+        expect(lastAsk().page).toBe(1);
+      });
+
+      it('after the last booking of a page is deleted, the page before it is shown (not an empty page)', async () => {
+        await create();
+        const cancelled = booking({ status: 'cancelled' });
+        answer(of(many([cancelled], { page: 3, total: 21 })));
+        component.loadBookings();
+        fixture.detectChanges();
+        buttonIn(cards()[0], 'Delete').click();
+        fixture.detectChanges();
+        const answers = [many([], { page: 3, total: 20, total_pages: 2 }), many([cancelled], { page: 2, total: 20, total_pages: 2 })];
+        answer(() => of(answers.shift()!));
+        buttonIn(dialog()!, 'Delete booking').click();
+        fixture.detectChanges();
+        expect(lastAsk().page).toBe(2);
+        expect(component.paging.page).toBe(2);
+        expect(cards().length).toBe(1);
+      });
+
+      it('saving or changing a booking reads the page you are on again (you stay where you are)', async () => {
+        await create();
+        answer(of(many([EXAMPLE], { page: 2 })));
+        component.loadBookings();
+        fixture.detectChanges();
+        buttonIn(cards()[0], 'Edit').click();
+        await settle();
+        fillValidAndSave();
+        fixture.detectChanges();
+        expect(lastAsk().page).toBe(2);
+
+        function fillValidAndSave() {
+          const form = fixture.debugElement.query(By.directive(BookingFormComponent)).componentInstance as BookingFormComponent;
+          form.form.deposit = 400;
+          form.submit();
+        }
+      });
+
+      it('a slow answer to an old question never replaces the answer to a newer one', async () => {
+        await create();
+        const slow = new Subject<Paged<Booking>>();
+        const fast = new Subject<Paged<Booking>>();
+        const queue = [slow, fast];
+        answer(() => queue.shift()!);
+        tab('Booked').click();
+        tab('Cancelled').click();
+        fixture.detectChanges();
+        fast.next(pageOf([booking({ id: 3, product_name: 'The cancelled one', status: 'cancelled' })]));
+        slow.next(pageOf([booking({ id: 1, product_name: 'The booked one' })]));
+        fixture.detectChanges();
+        expect(cards().map(c => c.querySelector('h3')!.textContent!.trim())).toEqual(['The cancelled one']);
+      });
+
+      it('no bar while there is nothing to page through', async () => {
+        await create([]);
+        expect(bar()).toBeNull();
       });
     });
 
@@ -362,12 +610,12 @@ describe('BookingsComponent', () => {
       await create();
       await openNew();
       fillValid();
-      const loadsBefore = bookingsApi['getBookings'].calls.count();
+      const loadsBefore = asked.length;
       formComponent().submit();
       fixture.detectChanges();
       expect(bookingsApi['createBooking']).toHaveBeenCalledTimes(1);
       expect(drawer()).toBeNull();
-      expect(bookingsApi['getBookings'].calls.count()).toBe(loadsBefore + 1);
+      expect(asked.length).toBe(loadsBefore + 1);
       expect(text()).toContain('Booking saved.');
     });
 
@@ -716,7 +964,16 @@ describe('BookingsComponent', () => {
       expect(component.errorMessage).toBe('That booking is not waiting for pickup any more.');
     });
 
-    it('a booking that is not in the list says so too', async () => {
+    it('the booking is read by its number, so it opens also when it is not on the page on screen', async () => {
+      const onAnotherPage = booking({ id: 2, product_name: 'On another page' });
+      await create([booking({ id: 1 }), onAnotherPage], [], [], scan => scan.ask({ kind: 'pickup', bookingId: 2 }), [booking({ id: 1 })]);
+      await settle();
+      expect(cards().length).toBe(1);                                   // the page on screen does not have it
+      expect(bookingsApi['getBooking']).toHaveBeenCalledWith(2);
+      expect(component.pickingUp?.id).toBe(2);
+    });
+
+    it('a booking that does not exist says so too', async () => {
       await create([booking({ id: 1 })], [], [], scan => scan.ask({ kind: 'pickup', bookingId: 404 }));
       await settle();
       expect(drawer()).toBeNull();
@@ -833,12 +1090,12 @@ describe('BookingsComponent', () => {
 
     it('says the Sale was made and that the laptop is sold, and loads the lists again', async () => {
       await startPickup();
-      const loads = bookingsApi['getBookings'].calls.count();
+      const loads = asked.length;
       const invoiceLoads = invoicesApi['getInvoices'].calls.count();
       buttonIn(drawerEl()!, 'Collect $550 and make the sale').click();
       await settle();
       expect(text()).toContain('Sale 000044 made. The laptop is marked as sold.');
-      expect(bookingsApi['getBookings'].calls.count()).toBe(loads + 1);
+      expect(asked.length).toBe(loads + 1);
       expect(invoicesApi['getInvoices'].calls.count()).toBe(invoiceLoads + 1);
     });
 
@@ -888,10 +1145,10 @@ describe('BookingsComponent', () => {
 
     it('closing the drawer after a failure loads the list again, so it tells the truth', async () => {
       await startPickup();
-      const loads = bookingsApi['getBookings'].calls.count();
+      const loads = asked.length;
       buttonIn(drawerEl()!, 'Cancel').click();
       fixture.detectChanges();
-      expect(bookingsApi['getBookings'].calls.count()).toBe(loads + 1);
+      expect(asked.length).toBe(loads + 1);
     });
 
     it('while the Sale is being made the buttons are off, a second press does nothing, and it cannot be closed', async () => {
@@ -949,14 +1206,14 @@ describe('BookingsComponent', () => {
 
     it('"Yes, cancel it" sets the status to cancelled, reloads and says so', async () => {
       await create([EXAMPLE]);
-      const loads = bookingsApi['getBookings'].calls.count();
+      const loads = asked.length;
       cancelButton().click();
       fixture.detectChanges();
       buttonIn(dom().querySelector('app-ask-dialog') as HTMLElement, 'Yes, cancel it').click();
       await settle();
       expect(bookingsApi['updateBooking']).toHaveBeenCalledOnceWith(1, { status: 'cancelled' });
       expect(dom().querySelector('app-ask-dialog')).toBeNull();
-      expect(bookingsApi['getBookings'].calls.count()).toBe(loads + 1);
+      expect(asked.length).toBe(loads + 1);
       expect(text()).toContain('Booking cancelled.');
     });
 
@@ -1303,12 +1560,12 @@ describe('BookingsComponent', () => {
       await create([EXAMPLE, booking({ id: 2, product_name: 'Other', status: 'cancelled' })]);
       buttonIn(cards()[1], 'Delete').click();
       fixture.detectChanges();
-      const loadsBefore = bookingsApi['getBookings'].calls.count();
+      const loadsBefore = asked.length;
       buttonIn(dialog()!, 'Delete booking').click();
       fixture.detectChanges();
       expect(bookingsApi['deleteBooking']).toHaveBeenCalledOnceWith(2);
       expect(dialog()).toBeNull();
-      expect(bookingsApi['getBookings'].calls.count()).toBe(loadsBefore + 1);
+      expect(asked.length).toBe(loadsBefore + 1);
       expect(text()).toContain('Booking deleted.');
     });
 
