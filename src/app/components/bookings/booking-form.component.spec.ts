@@ -18,8 +18,9 @@ const EXAMPLE: Booking = {
 const booking = (over: Partial<Booking> = {}): Booking => ({ ...EXAMPLE, ...over });
 const product = (over: Partial<Product> = {}): Product => ({
   id: 7, sku: 'MAC-901', name: 'MacBook Air M5', category_id: 1, brand: 'Apple', model: '', selling_price: 999,
-  extra_prices: [], stock_quantity: 1, min_stock_level: 0, is_archived: false, image_url: null, ...over,
+  extra_prices: [], stock_quantity: 1, min_stock_level: 0, is_archived: false, image_url: '/uploads/air.png', ...over,
 });
+
 const picture = (name = 'receipt.png') => new File([new Uint8Array(100)], name, { type: 'image/png' });
 
 interface Options {
@@ -60,7 +61,7 @@ describe('BookingFormComponent', () => {
     fixture.componentRef.setInput('today', options.today ?? '2026-11-09');
     if (options.booking) fixture.componentRef.setInput('booking', options.booking);
     if (options.product) fixture.componentRef.setInput('product', options.product);
-    if (options.products) fixture.componentRef.setInput('products', options.products);
+    fixture.componentRef.setInput('products', options.products ?? [product()]);
     saved = [];
     cancelled = 0;
     component.saved.subscribe(result => saved.push(result));
@@ -81,16 +82,18 @@ describe('BookingFormComponent', () => {
   };
   // Lets the promises that are already waiting finish (Angular wires a form box a moment after it appears), then redraws.
   const settle = async () => { for (let i = 0; i < 3; i++) await Promise.resolve(); fixture.detectChanges(); };
+
   const photoBox = () => fixture.debugElement.query(By.directive(PhotoUploadComponent)).componentInstance as PhotoUploadComponent;
   const addPhotos = (...files: File[]) => {
     photoBox().onFilesSelected({ target: { files, value: 'x' } } as unknown as Event);
     fixture.detectChanges();
   };
+  const laptopPhotoShown = () => dom().querySelector('app-photo-upload img[alt="Photo preview"]') as HTMLImageElement | null;
 
   /** Fills a valid booking in (through the form the boxes are bound to). */
   const fillValid = () => {
     Object.assign(component.form, {
-      product_name: 'MacBook Air M5 | RAM 16GB | SSD 512GB', phone: '011968240', telegram: '@Horth_Heng',
+      product_id: 7, product_name: 'MacBook Air M5 | RAM 16GB | SSD 512GB', phone: '011968240', telegram: '@Horth_Heng',
       full_price: 1050, deposit: 500, booking_date: '2026-11-08', pickup_date: '2026-11-12',
     });
   };
@@ -120,9 +123,24 @@ describe('BookingFormComponent', () => {
       expect(text()).toContain('12/11/2026 · Thursday');
     });
 
-    it('asks the customer for a phone or Telegram, and for at least one', async () => {
+    it('marks Phone and Telegram with the red * like the other needed boxes', async () => {
       await create();
-      expect(text()).toContain('Phone or Telegram: at least one.');
+      for (const id of ['b-product', 'b-phone', 'b-telegram', 'b-price', 'b-booked', 'b-pickup']) {
+        expect(dom().querySelector(`label[for="${id}"] .text-red-500`)?.textContent).withContext(id).toBe('*');
+      }
+      expect(dom().querySelector('label[for="b-deposit"] .text-red-500')).toBeNull();      // the deposit is optional
+      expect(text()).not.toContain('at least one');                                         // and no extra line to explain it
+    });
+
+    it('a short Telegram username like "li" or "aa" is accepted (the form only needs one of phone / Telegram)', async () => {
+      await create();
+      fillValid();
+      component.form.phone = '';
+      for (const name of ['li', 'aa', '@li']) {
+        component.form.telegram = name;
+        component.submit();
+        expect(component.formError).withContext(name).toBe('');
+      }
     });
 
     describe('started from a product (the Book button on the Products page)', () => {
@@ -133,7 +151,7 @@ describe('BookingFormComponent', () => {
         expect(component.form.product_name).toBe('MacBook Air M5');
         expect(component.form.product_id).toBe(7);
         expect(component.form.full_price).toBe(999);
-        expect(text()).toContain('From your products: MacBook Air M5');
+        expect(text()).not.toContain('From your products');
       });
 
       it('offers the product\'s other prices as buttons, and choosing one sets the name and the price', async () => {
@@ -241,7 +259,7 @@ describe('BookingFormComponent', () => {
       component.form.phone = ' 011968240 ';
       component.submit();
       expect(bookingsApi['createBooking']).toHaveBeenCalledOnceWith({
-        product_id: null, product_name: 'MacBook Air M5 | RAM 16GB | SSD 512GB', phone: '011968240', telegram: '@Horth_Heng',
+        product_id: 7, product_name: 'MacBook Air M5 | RAM 16GB | SSD 512GB', phone: '011968240', telegram: '@Horth_Heng',
         full_price: 1050, deposit: 500, booking_date: '2026-11-08', pickup_date: '2026-11-12', status: 'booked', images: [],
       });
     });
@@ -334,8 +352,7 @@ describe('BookingFormComponent', () => {
 
     it('keeps the agreed price when another product is picked while editing', async () => {
       await create({ booking: EXAMPLE, products: [product({ id: 1, name: 'MacBook Air M5', selling_price: 999 })] });
-      component.form.product_name = 'macbook';
-      component.onProductInput();
+      component.onProductText('macbook');
       component.pickProduct(component.products[0]);
       expect(component.form.full_price).toBe(1050);
     });
@@ -413,7 +430,7 @@ describe('BookingFormComponent', () => {
       expect(component.form.product_id).toBe(1);
       expect(component.form.full_price).toBe(999);
       expect(suggestions().length).toBe(0);
-      expect(text()).toContain('From your products: MacBook Air M5');
+      expect(text()).not.toContain('From your products');
     });
 
     it('does not overwrite a price that was already typed by hand', async () => {
@@ -445,18 +462,6 @@ describe('BookingFormComponent', () => {
       await create({ products: catalogue() });
       type('#b-product', 'tuf');
       pick(0);
-      expect(dom().querySelector('[aria-label="Prices of this product"]')).toBeNull();
-    });
-
-    it('the ✕ unlinks the product but keeps what was typed', async () => {
-      await create({ products: catalogue() });
-      type('#b-product', 'air m5');
-      pick(0);
-      (dom().querySelector('button[aria-label="Do not link this product"]') as HTMLButtonElement).click();
-      fixture.detectChanges();
-      expect(component.form.product_id).toBeNull();
-      expect(component.form.product_name).toBe('MacBook Air M5');
-      expect(text()).not.toContain('From your products');
       expect(dom().querySelector('[aria-label="Prices of this product"]')).toBeNull();
     });
 
@@ -502,25 +507,20 @@ describe('BookingFormComponent', () => {
     });
   });
 
-  describe('a booking takes the laptop off the shelf: the line under the Product box says how', () => {
+  describe('under the Product box: a line only when the laptop cannot be booked', () => {
     const note = () => dom().querySelector('[data-hold-note]') as HTMLElement | null;
 
-    it('a free single laptop: "set aside (off the Menu) until it is picked up or cancelled"', async () => {
+    it('says nothing for a free single laptop, or for counted stock (with or without any left)', async () => {
       await create({ product: product({ id: 7, track_stock: false }), products: [product({ id: 7, track_stock: false })] });
-      expect(note()!.textContent).toContain('This laptop will be set aside (off the Menu) until it is picked up or cancelled.');
-      expect(note()!.classList).not.toContain('text-red-600');
-    });
-
-    it('counted stock: one will be taken from stock, and how many there are now', async () => {
+      expect(note()).toBeNull();
+      TestBed.resetTestingModule();
       const counted = product({ id: 7, track_stock: true, stock_quantity: 3 });
       await create({ product: counted, products: [counted] });
-      expect(note()!.textContent).toContain('One will be taken from stock (3 now).');
-    });
-
-    it('counted stock with none left: still bookable, nothing is taken', async () => {
-      const counted = product({ id: 7, track_stock: true, stock_quantity: 0 });
-      await create({ product: counted, products: [counted] });
-      expect(note()!.textContent).toContain('None left in stock, so nothing is taken.');
+      expect(note()).toBeNull();
+      TestBed.resetTestingModule();
+      const none = product({ id: 7, track_stock: true, stock_quantity: 0 });
+      await create({ product: none, products: [none] });
+      expect(note()).toBeNull();
     });
 
     it('a single laptop that someone else has set aside says so, in red', async () => {
@@ -535,24 +535,19 @@ describe('BookingFormComponent', () => {
       expect(note()!.textContent).toContain('This laptop is in repair.');
     });
 
-    it('editing the booking that holds the laptop: it is its own laptop, so not red', async () => {
+    it('editing the booking that holds the laptop: it is its own laptop, so nothing is said', async () => {
       const own = product({ id: 7, track_stock: false, hold_status: 'booked' });
       await create({ booking: booking({ stock_held: true, product_track_stock: false }), products: [own] });
-      expect(note()!.textContent).toContain('This laptop is set aside for this booking.');
-      expect(note()!.classList).not.toContain('text-red-600');
-    });
-
-    it('editing a booking that holds counted stock says its unit is already taken', async () => {
-      const own = product({ id: 7, track_stock: true, stock_quantity: 2 });
-      await create({ booking: booking({ stock_held: true, product_track_stock: true }), products: [own] });
-      expect(note()!.textContent).toContain('One laptop is taken from stock for this booking.');
+      expect(note()).toBeNull();
     });
 
     it('says nothing for a cancelled booking, or when no laptop of the shop is linked', async () => {
-      const own = product({ id: 7, track_stock: false });
-      await create({ booking: booking({ status: 'cancelled' }), products: [own] });
+      const blocked = product({ id: 7, track_stock: false, hold_status: 'booked' });
+      await create({ booking: booking({ status: 'cancelled' }), products: [blocked] });
       expect(note()).toBeNull();
       component.form.status = 'booked';
+      fixture.detectChanges();
+      expect(note()).not.toBeNull();
       component.unlinkProduct();
       fixture.detectChanges();
       expect(note()).toBeNull();
@@ -573,8 +568,53 @@ describe('BookingFormComponent', () => {
   });
 
   // ---------------------------------------------------------------------------------------------
-  describe('photos (e.g. the deposit receipt)', () => {
-    it('has a photo box, labelled', async () => {
+  describe('photos: the laptop\'s own photo, and more of them', () => {
+    it('the photo of the laptop that was picked is the first photo in the box, marked "Laptop"', async () => {
+      await create();
+      expect(laptopPhotoShown()).toBeNull();
+      component.pickProduct(product({ id: 7, image_url: '/uploads/air.png' }));
+      fixture.detectChanges();
+      expect(laptopPhotoShown()!.getAttribute('src')).toContain('/uploads/air.png');
+      expect(photoBox().all[0]).toBe('/uploads/air.png');
+      expect(text()).toContain('Laptop');
+      expect(component.form.images).toEqual([]);                // it is shown, not copied into the booking
+    });
+
+    it('a picture added in the box comes after the laptop\'s photo, and the laptop\'s photo cannot be removed', async () => {
+      await create();
+      component.pickProduct(product({ id: 7, image_url: '/uploads/air.png' }));
+      addPhotos(picture());
+      expect(photoBox().all).toEqual(['/uploads/air.png', '/uploads/receipt-1.png']);
+      expect(dom().querySelectorAll('ul[aria-label="All photos"] li').length).toBe(2);
+      expect(dom().querySelectorAll('button[aria-label^="Remove photo"]').length).toBe(1);
+    });
+
+    it('a name typed by hand that is the name of a product shows that product\'s photo (not linked)', async () => {
+      await create({ products: [product({ id: 7, name: 'MacBook Air 13" M2', image_url: '/uploads/air.png' })] });
+      type('#b-product', '  macbook AIR 13" m2 ');
+      expect(laptopPhotoShown()!.getAttribute('src')).toContain('/uploads/air.png');
+      expect(component.form.product_id).toBeNull();
+    });
+
+    it('shows nothing when the laptop has no photo, or no laptop is picked', async () => {
+      await create({ products: [product({ id: 7, image_url: null, images: [] })] });
+      expect(laptopPhotoShown()).toBeNull();
+      component.pickProduct(product({ id: 7, image_url: null, images: [] }));
+      fixture.detectChanges();
+      expect(laptopPhotoShown()).toBeNull();
+    });
+
+    it('saves without asking anything, with or without a photo', async () => {
+      await create({ products: [] });
+      fillValid();
+      component.form.product_id = null;
+      component.submit();
+      fixture.detectChanges();
+      expect(dom().querySelector('app-ask-dialog')).toBeNull();
+      expect(bookingsApi['createBooking']).toHaveBeenCalledTimes(1);
+    });
+
+    it('has a photo box for more pictures, up to 4', async () => {
       await create();
       expect(photoBox()).toBeTruthy();
       expect(text()).toContain('Photos (e.g. deposit receipt)');
@@ -585,36 +625,34 @@ describe('BookingFormComponent', () => {
       await create();
       fillValid();
       addPhotos(picture());
-      expect(component.form.images).toEqual(['/uploads/receipt-1.png']);
       component.submit();
       expect(bookingsApi['createBooking'].calls.mostRecent().args[0].images).toEqual(['/uploads/receipt-1.png']);
     });
 
     it('the photos of an existing booking are shown, and removing one is saved', async () => {
-      await create({ booking: booking({ images: ['/uploads/a.png', '/uploads/b.png'] }) });
-      expect(dom().querySelectorAll('ul[aria-label="Photos"] li a').length).toBe(2);
+      await create({ booking: booking({ images: ['/uploads/1.png', '/uploads/2.png'] }) });
+      expect(dom().querySelectorAll('ul[aria-label="All photos"] li').length).toBe(3);       // the laptop's own photo + the 2 of the booking
       (dom().querySelector('button[aria-label="Remove photo 1"]') as HTMLButtonElement).click();
       fixture.detectChanges();
       component.submit();
-      expect(bookingsApi['updateBooking'].calls.mostRecent().args[1].images).toEqual(['/uploads/b.png']);
+      expect(bookingsApi['updateBooking'].calls.mostRecent().args[1].images).toEqual(['/uploads/2.png']);
       expect(productsApi['discardImage']).not.toHaveBeenCalled();           // the API cleans up the saved file when it saves
     });
 
     it('Save waits while a picture is on its way (the button says so), then works', async () => {
       await create();
+      fillValid();
       const pending = new Subject<{ url: string }>();
       productsApi['uploadImage'].and.returnValue(pending);
-      fillValid();
       addPhotos(picture());
       expect(component.uploading).toBeTrue();
-      expect(buttonIn('Uploading...').disabled).toBeTrue();
+      expect(text()).toContain('Uploading...');
       component.submit();
       expect(bookingsApi['createBooking']).not.toHaveBeenCalled();
       pending.next({ url: '/uploads/late.png' });
       pending.complete();
       fixture.detectChanges();
       expect(component.uploading).toBeFalse();
-      expect(buttonIn('Save booking').disabled).toBeFalse();
       component.submit();
       expect(bookingsApi['createBooking'].calls.mostRecent().args[0].images).toEqual(['/uploads/late.png']);
     });
@@ -631,8 +669,6 @@ describe('BookingFormComponent', () => {
     it('closing without saving deletes the pictures uploaded in this form', async () => {
       await create();
       addPhotos(picture('a.png'), picture('b.png'));
-      component.cancel();
-      expect(cancelled).toBe(1);
       fixture.destroy();
       expect(productsApi['discardImage'].calls.allArgs().map(a => a[0]).sort()).toEqual(['/uploads/receipt-1.png', '/uploads/receipt-2.png']);
     });

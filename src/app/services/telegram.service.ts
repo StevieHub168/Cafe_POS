@@ -12,6 +12,8 @@ export interface TelegramSent {
   group: TelegramKind;
   /** true = Telegram could not use the laptop photo, so only the words went. */
   withoutPhotos: boolean;
+  /** true = this was the Sold message of a booking, and the Booking message in the group was taken down. */
+  removedBooking?: boolean;
 }
 
 @Injectable({ providedIn: 'root' })

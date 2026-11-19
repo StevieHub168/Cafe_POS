@@ -47,7 +47,9 @@ describe('PhotoUploadComponent', () => {
     for (let i = 0; i < 100 && !done(); i++) await new Promise(resolve => setTimeout(resolve, 30));
     expect(done()).toBeTrue();
   };
-  const thumbs = () => Array.from(dom().querySelectorAll('ul[aria-label="Photos"] li')).filter(li => li.querySelector('a')) as HTMLElement[];
+  const thumbs = () => Array.from(dom().querySelectorAll('ul[aria-label="All photos"] li')) as HTMLElement[];
+  const preview = () => dom().querySelector('img[alt="Photo preview"]') as HTMLImageElement | null;
+  const clickButton = (label: string) => (Array.from(dom().querySelectorAll('button')).find(b => b.textContent!.trim() === label) as HTMLButtonElement).click();
   const fileInputs = () => Array.from(dom().querySelectorAll('input[type="file"]')) as HTMLInputElement[];
   const last = () => emitted[emitted.length - 1];
 
@@ -74,17 +76,89 @@ describe('PhotoUploadComponent', () => {
       expect(text()).toContain('Only pictures');
     });
 
-    it('each photo is a small picture that opens big in a new tab, with a ✕ to remove it, and a count', async () => {
+    it('no photo yet: an empty preview that says so, and no small pictures', async () => {
+      await create();
+      expect(preview()).toBeNull();
+      expect(text()).toContain('No photo yet');
+      expect(thumbs().length).toBe(0);
+      expect(text()).not.toContain('Remove photo');
+    });
+
+    it('one photo: a big preview, "Add photos" and "Remove photo", and a count; no row of small pictures', async () => {
+      await create(['/uploads/a.png']);
+      expect(preview()!.getAttribute('src')).toContain('/uploads/a.png');
+      expect(thumbs().length).toBe(0);
+      expect(text()).toContain('1 / 4');
+      expect(text()).toContain('Add photos');
+      clickButton('Remove photo');
+      expect(last()).toEqual([]);
+    });
+
+    it('several photos: a small picture for each with a ✕, and a click shows that one big', async () => {
       await create(['/uploads/a.png', 'https://img.example.com/b.jpg']);
       expect(thumbs().length).toBe(2);
-      const link = thumbs()[0].querySelector('a')!;
-      expect(link.getAttribute('href')).toContain('/uploads/a.png');
-      expect(link.getAttribute('target')).toBe('_blank');
-      expect(link.getAttribute('rel')).toContain('noopener');
+      expect(preview()!.getAttribute('src')).toContain('/uploads/a.png');
       expect(thumbs()[1].querySelector('img')!.getAttribute('src')).toBe('https://img.example.com/b.jpg');
       expect(thumbs()[0].querySelector('button[aria-label="Remove photo 1"]')).not.toBeNull();
+      (thumbs()[1].querySelector('button[aria-label="Show photo 2"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(preview()!.getAttribute('src')).toBe('https://img.example.com/b.jpg');
       expect(text()).toContain('2 / 4');
-      expect(text()).toContain('Add photos');
+    });
+
+    it('"Remove photo" removes the one that is big', async () => {
+      await create(['/uploads/a.png', '/uploads/b.png']);
+      (thumbs()[1].querySelector('button[aria-label="Show photo 2"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      clickButton('Remove photo');
+      expect(last()).toEqual(['/uploads/a.png']);
+    });
+
+    it('the photo that was just added is the one shown big', async () => {
+      await create(['/uploads/a.png']);
+      choose([file('b.png')]);
+      expect(preview()!.getAttribute('src')).toContain('/uploads/new-1.png');
+    });
+
+    describe('with a lead photo (the laptop\'s own)', () => {
+      const withLead = async (photos: string[] = []) => {
+        await create(photos);
+        fixture.componentRef.setInput('lead', '/uploads/laptop.png');
+        fixture.detectChanges();
+      };
+
+      it('is shown first and big, marked "Laptop", with no Remove button', async () => {
+        await withLead();
+        expect(preview()!.getAttribute('src')).toContain('/uploads/laptop.png');
+        expect(text()).toContain('Laptop');
+        expect(text()).not.toContain('Remove photo');
+        expect(text()).toContain('Add photos');
+      });
+
+      it('is not counted and is not in the list the parent gets', async () => {
+        await withLead(['/uploads/a.png']);
+        expect(text()).toContain('1 / 4');
+        expect(component.photos).toEqual(['/uploads/a.png']);
+        expect(thumbs().length).toBe(2);
+        expect(thumbs()[0].textContent).toContain('Laptop');
+        expect(thumbs()[0].querySelector('button[aria-label^="Remove photo"]')).toBeNull();
+      });
+
+      it('the ✕ of the next photo removes that photo, not the laptop', async () => {
+        await withLead(['/uploads/a.png', '/uploads/b.png']);
+        (thumbs()[1].querySelector('button[aria-label="Remove photo 1"]') as HTMLButtonElement).click();
+        expect(last()).toEqual(['/uploads/b.png']);
+      });
+
+      it('"Remove photo" works on an added photo that is big', async () => {
+        await withLead(['/uploads/a.png']);
+        (thumbs()[1].querySelector('button[aria-label="Show photo 2"]') as HTMLButtonElement).click();
+        fixture.detectChanges();
+        clickButton('Remove photo');
+        fixture.detectChanges();
+        expect(last()).toEqual([]);
+        expect(preview()!.getAttribute('src')).toContain('/uploads/laptop.png');
+      });
     });
   });
 

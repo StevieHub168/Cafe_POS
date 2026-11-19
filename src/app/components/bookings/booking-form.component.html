@@ -4,36 +4,11 @@
     <!-- Product: type to find one of your products, or write anything -->
     <div>
       <label for="b-product" class="mb-1 block text-xs font-medium text-gray-700">Product <span class="text-red-500">*</span></label>
-      <input id="b-product" type="text" name="product_name" [(ngModel)]="form.product_name" (ngModelChange)="onProductInput()"
-        (blur)="hideSuggestions()" (keydown.enter)="pickFirstSuggestion($event)" autocomplete="off" maxlength="255"
-        placeholder="e.g. MacBook Air M5 | RAM 16GB | SSD 512GB"
-        class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
+      <app-product-search inputId="b-product" name="product_name" [text]="form.product_name" [products]="products" [hideHeld]="true"
+        placeholder="e.g. MacBook Air M5 | RAM 16GB | SSD 512GB" (textChange)="onProductText($event)" (picked)="pickProduct($event)"></app-product-search>
 
-      <!-- Your products that match what is typed: click one to fill the name and price -->
-      <ul *ngIf="productSuggestions.length > 0" aria-label="Your products that match"
-        class="mt-1 divide-y divide-surface-border overflow-hidden rounded-lg border border-surface-border bg-white shadow-sm">
-        <li *ngFor="let suggestion of productSuggestions">
-          <button type="button" (mousedown)="$event.preventDefault(); pickProduct(suggestion)"
-            class="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-gray-50">
-            <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded bg-gray-100">
-              <img *ngIf="suggestion.image_url" [src]="suggestion.image_url | imgSrc" alt="" class="h-full w-full object-cover" />
-            </span>
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-sm font-medium text-gray-900">{{ suggestion.name }}</span>
-              <span class="block truncate text-xs text-gray-400">{{ suggestion.brand }} {{ suggestion.model }}</span>
-            </span>
-            <span class="text-sm font-medium tabular-nums text-gray-700">{{ money(suggestion.selling_price) }}</span>
-          </button>
-        </li>
-      </ul>
-
-      <!-- Picked from your products -->
-      <p *ngIf="linkedProduct as linked" class="mt-1.5 flex items-center gap-2 text-xs text-gray-500">
-        <span class="min-w-0 truncate">From your products: <span class="font-medium text-gray-700">{{ linked.name }}</span> · {{ money(linked.selling_price) }}</span>
-        <button type="button" (click)="unlinkProduct()" class="ml-auto flex-shrink-0 rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600" aria-label="Do not link this product">✕</button>
-      </p>
-      <!-- What saving does to the stock of this laptop -->
-      <p *ngIf="holdNote" class="mt-1 text-xs" [ngClass]="holdBlocked ? 'text-red-600' : 'text-gray-500'" data-hold-note>{{ holdNote }}</p>
+      <!-- Only when this laptop cannot be booked (someone else has it set aside) -->
+      <p *ngIf="holdBlockedNote" class="mt-1 text-xs text-red-600" data-hold-note>{{ holdBlockedNote }}</p>
       <div *ngIf="priceOptions.length > 1" class="mt-2 flex flex-wrap gap-1.5" role="group" aria-label="Prices of this product">
         <button *ngFor="let option of priceOptions" type="button" (click)="chooseOption(option)"
           class="rounded-md border px-2 py-1 text-xs transition"
@@ -48,17 +23,16 @@
     <!-- Contact -->
     <div class="grid gap-3 sm:grid-cols-2">
       <div>
-        <label for="b-phone" class="mb-1 block text-xs font-medium text-gray-700">Phone</label>
+        <label for="b-phone" class="mb-1 block text-xs font-medium text-gray-700">Phone <span class="text-red-500">*</span></label>
         <input id="b-phone" type="tel" name="phone" [(ngModel)]="form.phone" inputmode="tel" autocomplete="off" maxlength="20" placeholder="011 968 240"
           class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
       </div>
       <div>
-        <label for="b-telegram" class="mb-1 block text-xs font-medium text-gray-700">Telegram</label>
+        <label for="b-telegram" class="mb-1 block text-xs font-medium text-gray-700">Telegram <span class="text-red-500">*</span></label>
         <input id="b-telegram" type="text" name="telegram" [(ngModel)]="form.telegram" autocomplete="off" autocapitalize="off" maxlength="60" placeholder="@username"
           class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
       </div>
     </div>
-    <p class="-mt-4 text-[11px] text-gray-400">Phone or Telegram: at least one.</p>
 
     <!-- Money -->
     <div>
@@ -103,8 +77,8 @@
       </div>
     </div>
 
-    <!-- Photos, e.g. the deposit receipt -->
-    <app-photo-upload [(photos)]="form.images" [max]="maxPhotos" label="Photos (e.g. deposit receipt)"
+    <!-- Photos: the laptop's own photo comes first (it goes to Telegram first); more can be added, e.g. the deposit receipt -->
+    <app-photo-upload [(photos)]="form.images" [lead]="laptopPhoto" [max]="maxPhotos" label="Photos (e.g. deposit receipt)"
       (uploadingChange)="uploading = $event"></app-photo-upload>
 
     <!-- Status -->

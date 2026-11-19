@@ -20,9 +20,8 @@
   </div>
 
   <!-- The numbers -->
-  <div class="grid grid-cols-1 gap-3 sm:grid-cols-3" data-summary>
+  <div class="grid grid-cols-1 gap-3 sm:grid-cols-2" data-summary>
     <div class="rounded-xl border border-surface-border bg-white px-4 py-3.5"><p class="text-xs text-gray-500">Sold this month</p><p class="mt-0.5 text-2xl font-bold tabular-nums text-gray-900"><span data-sold>{{ soldThisMonth }}</span> <span class="ml-1 text-sm font-medium text-gray-500">{{ soldThisMonth === 1 ? 'laptop' : 'laptops' }}</span></p></div>
-    <div class="rounded-xl border border-surface-border bg-white px-4 py-3.5"><p class="text-xs text-gray-500">Money received this month</p><p class="mt-0.5 text-2xl font-bold tabular-nums text-gray-900" data-received>{{ money(receivedThisMonth) }}</p></div>
     <div class="rounded-xl border border-surface-border bg-white px-4 py-3.5"><p class="text-xs text-gray-500">Still under warranty</p><p class="mt-0.5 text-2xl font-bold tabular-nums text-gray-900"><span data-warranty-count>{{ underWarranty }}</span> <span class="ml-1 text-sm font-medium text-gray-500">{{ underWarranty === 1 ? 'laptop' : 'laptops' }}</span></p></div>
   </div>
 

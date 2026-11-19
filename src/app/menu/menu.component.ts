@@ -29,7 +29,8 @@ import { todayIso } from '../utils/dates';
 /** The question after a booking: make its invoice now? */
 type Asking = { booking: Booking };
 
-/** After a sale: the laptop is reviewed (what will change) next to the invoice paper, and the person marks it as sold or not. */
+/** A sale of one of the shop's laptops: the laptop is marked as sold by itself when the invoice is saved. This is what is asked again
+ *  next to the invoice paper ONLY when that did not work (e.g. no internet): the person tries again, or says "Not now". */
 interface SoldReview {
   product: Product;
   /** How many were sold: the quantity on the invoice line of this laptop (1 if there is none). */
@@ -315,7 +316,8 @@ export class MenuComponent implements OnInit {
     else this.backToLaptop();
   }
 
-  /** The invoice is saved: its paper opens so it can be printed, and after a SALE the laptop is reviewed under it. */
+  /** The invoice is saved: its paper opens so it can be printed. After a new SALE of one of the shop's laptops the laptop is marked as
+   *  sold at once (no question) and the Sold message goes to Telegram with the invoice picture. */
   onInvoiceSaved(result: InvoiceSaved): void {
     const work = this.invoicing;
     const reviewing = this.soldReview;
@@ -325,10 +327,9 @@ export class MenuComponent implements OnInit {
     this.showNotice(`Invoice ${formatInvoiceNumber(result.invoice.number)} ${result.created ? 'saved' : 'changed'}.`);
 
     if (result.created && result.invoice.type === 'sale' && work?.product) {
-      this.askError = '';
-      this.soldReview = { product: work.product, qty: this.soldQty(result.invoice, work.product), invoice: result.invoice };
+      this.markSoldNow({ product: work.product, qty: this.soldQty(result.invoice, work.product), invoice: result.invoice });
     } else if (!result.created && reviewing) {
-      // The invoice was changed while the review was waiting: the review follows the new invoice (the quantity may have changed).
+      // The invoice was changed while the question was waiting (marking as sold had failed): it follows the new invoice (the quantity may have changed).
       this.soldReview = { ...reviewing, qty: this.soldQty(result.invoice, reviewing.product), invoice: result.invoice };
     }
   }
@@ -384,7 +385,9 @@ export class MenuComponent implements OnInit {
     this.showNotice(this.bookingSavedNotice(asking.booking));
   }
 
-  // ---------- the "mark as sold" review ----------
+  // ---------- marking the laptop as sold after a sale ----------
+  // It is done by itself when the sale invoice is saved. The review bar under the paper only shows when that failed.
+
 
   /** The first photo of the laptop being reviewed (or none). */
   get soldPhoto(): string {
@@ -402,10 +405,16 @@ export class MenuComponent implements OnInit {
     return 'It is hidden from the Menu. You can put it back from Products.';
   }
 
-  /** The person said "Mark as sold": a single laptop is hidden from the Menu; a laptop with counted stock goes down by what was sold. */
+  /** The retry button of the question (shown only when marking the laptop as sold failed). */
   markSold(): void {
     const review = this.soldReview;
-    if (!review || this.isAnswering) return;
+    if (review) this.markSoldNow(review);
+  }
+
+  /** A single laptop is hidden from the Menu; a laptop with counted stock goes down by what was sold. Then the Sold message goes to
+   *  Telegram (the laptop photo + the invoice picture). When it fails nothing is sent, and the question shows with the reason. */
+  private markSoldNow(review: SoldReview): void {
+    if (this.isAnswering) return;
     const { product, qty } = review;
     if (product.id === undefined) { this.soldReview = null; return; }
     const changes: Partial<Product> = product.track_stock
@@ -420,12 +429,15 @@ export class MenuComponent implements OnInit {
         this.loadData();
         this.telegram.send('sold', review.invoice.id, review.invoice);   // the Sold group: laptop photo + the invoice picture
       },
-      // Stay open and say why, so the message is where you are looking.
-      error: (err) => (this.askError = err?.error?.error || 'Could not update the laptop. Please try again.')
+      // The invoice is saved but the laptop is not sold yet: ask again, with the reason, where the person is looking.
+      error: (err) => {
+        this.soldReview = review;
+        this.askError = err?.error?.error || 'Could not update the laptop. Please try again.';
+      }
     });
   }
 
-  /** The person said "Not now": nothing changes, the paper stays to print. */
+  /** "Not now" on the question: nothing changes, the paper stays to print. */
   skipSold(): void {
     const review = this.soldReview;
     if (!review || this.isAnswering) return;

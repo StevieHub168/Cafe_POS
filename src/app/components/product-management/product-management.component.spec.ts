@@ -335,6 +335,124 @@ describe('ProductManagementComponent - product drawer', () => {
     });
   });
 
+  describe('the window does not save or close by accident', () => {
+    function openFilled(): void {
+      component.openAddProduct();
+      component.selectFormCategory(2);
+      component.selectFormBrand('Asus');
+      component.form.name = 'Asus TUF A15';
+      component.form.selling_price = 749;
+      fixture.detectChanges();
+    }
+    const field = (selector: string) => dom().querySelector(selector) as HTMLElement;
+    const backdrop = () => field('.drawer-backdrop');
+    const pressKey = (target: HTMLElement, init: KeyboardEventInit = {}): KeyboardEvent => {
+      const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init });
+      target.dispatchEvent(event);
+      fixture.detectChanges();
+      return event;
+    };
+    const mouse = (target: HTMLElement, type: 'mousedown' | 'click') => {
+      target.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true }));
+      fixture.detectChanges();
+    };
+
+    describe('Enter', () => {
+      it('in a text box does not save (a stray Enter on a phone keyboard saved the laptop and closed the window)', () => {
+        openFilled();
+        const event = pressKey(field('#p-name'));
+        expect(event.defaultPrevented).toBeTrue();       // the browser does not submit the form
+        expect(products['createProduct']).not.toHaveBeenCalled();
+        expect(component.showProductModal).toBeTrue();
+      });
+
+      it('in the price box does not save either', () => {
+        openFilled();
+        expect(pressKey(field('#p-selling')).defaultPrevented).toBeTrue();
+      });
+
+      it('in the description still makes a new line', () => {
+        openFilled();
+        expect(pressKey(field('#p-desc')).defaultPrevented).toBeFalse();
+      });
+
+      it('on a button is left alone (the button still gets pressed)', () => {
+        openFilled();
+        const cancel = [...dom().querySelectorAll('.drawer-panel button')].find(b => b.textContent?.trim() === 'Cancel') as HTMLElement;
+        expect(pressKey(cancel).defaultPrevented).toBeFalse();
+      });
+
+      it('with Ctrl still saves (the tip at the bottom says so)', () => {
+        openFilled();
+        pressKey(field('#p-name'), { ctrlKey: true });
+        expect(products['createProduct']).toHaveBeenCalledTimes(1);
+        expect(component.showProductModal).toBeFalse();
+      });
+
+      it('with Cmd still saves', () => {
+        openFilled();
+        pressKey(field('#p-name'), { metaKey: true });
+        expect(products['createProduct']).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe('the dark area around the window', () => {
+      it('a click on it closes the window', () => {
+        openFilled();
+        mouse(backdrop(), 'mousedown');
+        mouse(backdrop(), 'click');
+        expect(component.showProductModal).toBeFalse();
+      });
+
+      it('a click with no press before it (a script or an assistive tool) closes it too', () => {
+        openFilled();
+        mouse(backdrop(), 'click');
+        expect(component.showProductModal).toBeFalse();
+      });
+
+      it('pressing inside a box and letting go on the dark area (selecting text) does NOT close it, and nothing typed is lost', () => {
+        openFilled();
+        mouse(field('#p-name'), 'mousedown');            // the press begins in the name box...
+        mouse(backdrop(), 'click');                      // ...and ends on the dark area: the browser reports a click there
+        expect(component.showProductModal).toBeTrue();
+        expect(component.form.name).toBe('Asus TUF A15');
+      });
+
+      it('after such a drag, the next real click on the dark area closes it', () => {
+        openFilled();
+        mouse(field('#p-name'), 'mousedown');
+        mouse(backdrop(), 'click');
+        expect(component.showProductModal).toBeTrue();
+
+        mouse(backdrop(), 'mousedown');
+        mouse(backdrop(), 'click');
+        expect(component.showProductModal).toBeFalse();
+      });
+
+      it('a normal click inside the window does not close it, and the next click outside still does', () => {
+        openFilled();
+        mouse(field('#p-name'), 'mousedown');
+        mouse(field('#p-name'), 'click');
+        expect(component.showProductModal).toBeTrue();
+
+        mouse(backdrop(), 'mousedown');
+        mouse(backdrop(), 'click');
+        expect(component.showProductModal).toBeFalse();
+      });
+
+      it('works the same when editing a laptop', () => {
+        component.openEditProduct({ id: 5, sku: 'WIN-ASU-004', name: 'Asus TUF A15', category_id: 2, brand: 'Asus', selling_price: 749,
+          stock_quantity: 1, min_stock_level: 0, track_stock: 0, is_archived: false, extra_prices: [], model: '', description: '' } as any);
+        fixture.detectChanges();
+        mouse(field('#p-name'), 'mousedown');
+        mouse(backdrop(), 'click');
+        expect(component.showProductModal).toBeTrue();
+        expect(pressKey(field('#p-name')).defaultPrevented).toBeTrue();
+        expect(products['updateProduct']).not.toHaveBeenCalled();
+      });
+    });
+  });
+
   describe('photos: several per product, the first one is the cover', () => {
     const png = (name: string): File => new File(['x'], name, { type: 'image/png' });
     const pngs = (...names: string[]): File[] => names.map(png);
@@ -1022,28 +1140,13 @@ describe('ProductManagementComponent - product drawer', () => {
       expect(drawerEl()).not.toBeNull();
     });
 
-    it('then says "Booked ..." with Copy details and View bookings', async () => {
+    it('then says "Booked ..." with View bookings (and no Copy details)', async () => {
       await openBooking();
       fillAndSave();
       const notice = dom().querySelector('[role="status"]') as HTMLElement;
       expect(notice.textContent).toContain('Booked “MacBook Air M1”.');
-      expect(noticeButton('Copy details')).toBeTruthy();
+      expect(notice.textContent).not.toContain('Copy details');
       expect(noticeButton('View bookings')).toBeTruthy();
-    });
-
-    it('"Copy details" copies the message to send', async () => {
-      await openBooking();
-      const copied = spyOn(component as any, 'copyText').and.returnValue(Promise.resolve(true));
-      fillAndSave();
-      noticeButton('Copy details').click();
-      await flush();
-      const text = copied.calls.mostRecent().args[0] as string;
-      expect(text).toContain('Booking Details');
-      expect(text).toContain('• Product: MacBook Air M1');
-      expect(text).toContain('• Full Price: $799');
-      expect(text).toContain('• Deposit: $200');
-      expect(text).toContain('• Remaining Balance: $599');
-      expect(dom().querySelector('[role="status"]')!.textContent).toContain('Booking details copied');
     });
 
     it('"View bookings" goes to the Bookings page', async () => {
@@ -1296,9 +1399,10 @@ describe('ProductManagementComponent - product drawer', () => {
     });
 
     it('booking a free laptop from here reads the products again and says what happened', async () => {
-      products['getAllProducts'].and.returnValue(of(catalog));
+      const withPhoto = catalog.map((p, i) => (i === 2 ? { ...p, image_url: '/uploads/free.png' } : p));   // (it goes to Telegram with its photo)
+      products['getAllProducts'].and.returnValue(of(withPhoto));
       component.loadProducts();
-      component.openEditProduct(catalog[2]);
+      component.openEditProduct(withPhoto[2]);
       fixture.detectChanges();
       bookings['createBooking'].and.callFake((b: any) => of({ id: 50, remaining_balance: b.full_price - b.deposit, ...b, stock_held: true, product_track_stock: false }));
       bookButton()!.click();

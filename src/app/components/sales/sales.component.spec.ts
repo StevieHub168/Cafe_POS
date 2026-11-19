@@ -227,16 +227,12 @@ describe('SalesComponent', () => {
   });
 
   describe('the numbers on top', () => {
-    it('count the sales of this month, the money that came in on them, and the warranties still running', async () => {
+    it('count the sales of this month and the warranties still running (no money numbers)', async () => {
       await create();
       expect(dom().querySelector('[data-sold]')!.textContent!.trim()).toBe('2');
-      expect(dom().querySelector('[data-received]')!.textContent!.trim()).toBe('$2,123');          // 1,299 + 824 (what was paid; last month does not count)
       expect(dom().querySelector('[data-warranty-count]')!.textContent!.trim()).toBe('2');          // the last one ended
-    });
-
-    it('count what was PAID this month, not what is still owed', async () => {
-      await create([{ ...THIS_MONTH_A, deposit: 500, total: 1299, balance: 799 }]);
-      expect(dom().querySelector('[data-received]')!.textContent!.trim()).toBe('$500');
+      expect(dom().querySelectorAll('[data-summary] > div').length).toBe(2);
+      expect(text()).not.toContain('Money received');
     });
 
     it('say "laptop" for one and "laptops" for the others', async () => {
@@ -253,7 +249,7 @@ describe('SalesComponent', () => {
     it('are zero when there are no sales', async () => {
       await create([]);
       expect(dom().querySelector('[data-sold]')!.textContent!.trim()).toBe('0');
-      expect(dom().querySelector('[data-received]')!.textContent!.trim()).toBe('$0');
+      expect(dom().querySelector('[data-warranty-count]')!.textContent!.trim()).toBe('0');
     });
   });
 

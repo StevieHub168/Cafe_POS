@@ -108,20 +108,24 @@ describe('LaptopScanComponent (a scanned label)', () => {
   });
 
   describe('an available laptop', () => {
-    it('says Available and offers Sell, Book and Repair (and the label)', async () => {
+    it('offers Sell, Book and Repair, with no green "Available" card and no "Print label"', async () => {
       await open();
-      expect(q('[data-state="available"]')).not.toBeNull();
-      expect(q('[data-badge]')!.textContent!.trim()).toBe('Available');
-      expect(q('[data-sentence]')!.textContent).toBe('Ready to sell. Nobody has booked it.');
-      for (const name of ['sell', 'book', 'repair', 'label']) expect(action(name)).withContext(name).not.toBeNull();
+      expect(q('[data-status]')).toBeNull();
+      expect(text()).not.toContain('Available');
+      expect(text()).not.toContain('Nobody has booked it');
+      expect(text()).not.toContain('Print label');
+      for (const name of ['sell', 'book', 'repair']) expect(action(name)).withContext(name).not.toBeNull();
+      expect(action('label')).toBeNull();
       expect(action('sell')!.disabled).toBeFalse();
       expect(q('[data-locked]')).toBeNull();
       expect(bookingsApi.getBookings).not.toHaveBeenCalled();
       expect(repairsApi.getRepairs).not.toHaveBeenCalled();
     });
 
-    it('a laptop with counted stock says how many are in stock', async () => {
+    it('a laptop with counted stock keeps its card and says how many are in stock', async () => {
       await open(of(laptop({ track_stock: true, stock_quantity: 5, min_stock_level: 1 })));
+      expect(q('[data-state="available"]')).not.toBeNull();
+      expect(q('[data-badge]')!.textContent!.trim()).toBe('Available');
       expect(q('[data-sentence]')!.textContent).toBe('5 in stock and ready.');
     });
 
@@ -149,11 +153,6 @@ describe('LaptopScanComponent (a scanned label)', () => {
       });
     }
 
-    it('"Print label" opens the labels page with this laptop picked, 2 labels', async () => {
-      await open();
-      action('label')!.click();
-      expect(navigate).toHaveBeenCalledOnceWith(['/labels'], { queryParams: { ids: 7, per: 2 } });
-    });
   });
 
   describe('a booked laptop', () => {
@@ -197,7 +196,7 @@ describe('LaptopScanComponent (a scanned label)', () => {
     it('Sell, Book and Repair are not offered, and the page says why', async () => {
       bookingsApi.getBookings.and.returnValue(of([booking()]));
       await open(booked());
-      for (const name of ['sell', 'book', 'repair', 'label']) expect(action(name)).withContext(name).toBeNull();
+      for (const name of ['sell', 'book', 'repair']) expect(action(name)).withContext(name).toBeNull();
       expect(q('[data-locked]')!.textContent).toBe('It is booked, so Sell, Book and Repair are off for this laptop.');
     });
 
@@ -263,7 +262,7 @@ describe('LaptopScanComponent (a scanned label)', () => {
     it('only "Open Repairs" is offered, with the reason', async () => {
       repairsApi.getRepairs.and.returnValue(of([repair()]));
       await open(inRepair());
-      for (const name of ['sell', 'book', 'repair', 'label', 'pickup']) expect(action(name)).withContext(name).toBeNull();
+      for (const name of ['sell', 'book', 'repair', 'pickup']) expect(action(name)).withContext(name).toBeNull();
       action('repairs')!.click();
       expect(navigate).toHaveBeenCalledOnceWith(['/repairs']);
       expect(q('[data-locked]')!.textContent).toBe('Finish the repair first. Then the laptop is available again.');
@@ -312,7 +311,7 @@ describe('LaptopScanComponent (a scanned label)', () => {
 
     it('only "Open Sales" is offered, with the reason', async () => {
       await open(sold());
-      for (const name of ['sell', 'book', 'repair', 'label', 'pickup']) expect(action(name)).withContext(name).toBeNull();
+      for (const name of ['sell', 'book', 'repair', 'pickup']) expect(action(name)).withContext(name).toBeNull();
       action('sales')!.click();
       expect(navigate).toHaveBeenCalledOnceWith(['/sales']);
       expect(q('[data-locked]')!.textContent).toBe('It is sold, so Sell, Book and Repair are off for this laptop.');

@@ -11,6 +11,7 @@ import { Product } from '../../models/product.model';
 import { PageHeaderComponent } from '../ui/page-header.component';
 import { StatusBadgeComponent } from '../ui/status-badge.component';
 import { ConfirmDialogComponent } from '../ui/confirm-dialog.component';
+import { PhotoStripComponent } from '../ui/photo-strip.component';
 import { InvoiceEditorComponent } from '../invoices/invoice-editor.component';
 import { InvoiceViewerComponent } from '../invoices/invoice-viewer.component';
 import { InvoiceSaved } from '../invoices/invoice-form.component';
@@ -33,7 +34,7 @@ type Filter = RepairStatus | 'all';
 @Component({
   selector: 'app-repairs',
   standalone: true,
-  imports: [CommonModule, FormsModule, PageHeaderComponent, StatusBadgeComponent, ConfirmDialogComponent, RepairFormComponent, InvoiceEditorComponent, InvoiceViewerComponent, ImgSrcPipe],
+  imports: [CommonModule, FormsModule, PageHeaderComponent, StatusBadgeComponent, ConfirmDialogComponent, RepairFormComponent, InvoiceEditorComponent, InvoiceViewerComponent, PhotoStripComponent, ImgSrcPipe],
   templateUrl: './repairs.component.html'
 })
 export class RepairsComponent implements OnInit {
@@ -161,11 +162,6 @@ export class RepairsComponent implements OnInit {
 
   get waitingForPickup(): number {
     return this.repairs.filter(r => r.status === 'fixed').length;
-  }
-
-  /** What the fixed repairs will bring when they are picked up. */
-  get moneyToCollect(): number {
-    return Math.round(this.repairs.filter(r => r.status === 'fixed').reduce((sum, r) => sum + (r.cost ?? 0), 0) * 100) / 100;
   }
 
   // ---------- how a repair is shown ----------

@@ -267,7 +267,7 @@
 <app-invoice-viewer *ngIf="viewingInvoice as shown" [invoice]="shown" [locked]="!!soldReview" [reserve]="soldReview ? 170 : 0"
   (closed)="viewingInvoice = null" (edit)="editViewed()">
 
-  <!-- After a sale: look at what will change, then choose. Nothing is changed until "Mark as sold". -->
+  <!-- After a sale the laptop is marked as sold by itself. This question only shows when that did NOT work (the reason is in it): try again, or "Not now". -->
   <div viewerFooter *ngIf="soldReview as review" role="group" aria-labelledby="sold-review-title"
     class="flex-shrink-0 border-t border-surface-border bg-white px-4 py-3">
     <div class="flex items-center gap-3">

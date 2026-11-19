@@ -121,6 +121,14 @@ describe('RepairsComponent', () => {
       expect(devices()).toEqual(['Dell Inspiron 15', 'HP Pavilion 15', 'Asus ROG Strix G16']);
     });
 
+    it('a card shows the photos of what is wrong as small squares (click one to see it big), and nothing when there are none', async () => {
+      await create([{ ...RECEIVED, images: ['/uploads/1.png', '/uploads/2.png'] }, FIXED]);
+      const links = Array.from(cards()[0].querySelectorAll('ul[aria-label="Photos"] a')) as HTMLAnchorElement[];
+      expect(links.map(a => a.getAttribute('href')!.replace(/^.*\/uploads/, '/uploads'))).toEqual(['/uploads/1.png', '/uploads/2.png']);
+      expect(links.every(a => a.target === '_blank')).toBeTrue();
+      expect(cards()[1].querySelector('ul[aria-label="Photos"]')).toBeNull();
+    });
+
     it('a card shows the laptop, the customer with the phone, the problem, the date and the cost', async () => {
       await create();
       const first = cards()[0];
@@ -260,23 +268,23 @@ describe('RepairsComponent', () => {
   });
 
   describe('the numbers on top', () => {
-    it('count what is in the shop, what waits for pickup, and the money to collect', async () => {
+    it('count what is in the shop and what waits for pickup (no money number)', async () => {
       await create();
       expect(dom().querySelector('[data-in-shop]')!.textContent!.trim()).toBe('2');
       expect(dom().querySelector('[data-waiting]')!.textContent!.trim()).toBe('1');
-      expect(dom().querySelector('[data-money]')!.textContent!.trim()).toBe('$35');
+      expect(dom().querySelectorAll('[data-summary] > div').length).toBe(2);
+      expect(text()).not.toContain('Money to collect');
     });
 
-    it('the money is only what the FIXED repairs will bring (not received ones, not picked up ones)', async () => {
+    it('"waiting for pickup" is only the FIXED repairs (not received ones, not picked up ones)', async () => {
       await create([{ ...FIXED, cost: 35 }, { ...FIXED, id: 5, cost: 10.5 }, { ...FIXED, id: 6, cost: null }, RECEIVED, PICKED_UP]);
-      expect(dom().querySelector('[data-money]')!.textContent!.trim()).toBe('$45.50');
       expect(dom().querySelector('[data-waiting]')!.textContent!.trim()).toBe('3');
     });
 
     it('are zero when there are no repairs', async () => {
       await create([]);
       expect(dom().querySelector('[data-in-shop]')!.textContent!.trim()).toBe('0');
-      expect(dom().querySelector('[data-money]')!.textContent!.trim()).toBe('$0');
+      expect(dom().querySelector('[data-waiting]')!.textContent!.trim()).toBe('0');
     });
   });
 

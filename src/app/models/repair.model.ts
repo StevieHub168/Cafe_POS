@@ -33,6 +33,8 @@ export interface Repair {
   stock_held?: boolean;
   /** Of the laptop of the shop: true = counted stock, false = a single laptop, null = no laptop of the shop. */
   product_track_stock?: boolean | null;
+  /** Photos of what is wrong (uploaded from this app): ["/uploads/x.png"]. */
+  images?: string[];
   created_at?: string;
   updated_at?: string;
 }
@@ -42,6 +44,7 @@ export type RepairInput = Omit<Repair, 'id' | 'sale_invoice_number' | 'sale_date
 
 export const MAX_REPAIR_DEVICE = 80;
 export const MAX_REPAIR_PROBLEM = 140;
+export const MAX_REPAIR_PHOTOS = 4;
 
 /** The 3 steps, in order. */
 export const REPAIR_STEPS: { value: RepairStatus; label: string; tone: StatusTone }[] = [

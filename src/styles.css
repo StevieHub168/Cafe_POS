@@ -22,6 +22,37 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Date boxes. iPhone Safari draws its own grey, centred box (and an empty one almost without height); this makes them
+   look like the other boxes: white, left aligned, same height. */
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  height: 2.375rem;         /* the same as the other boxes */
+  background-color: #fff;
+  text-align: left;
+}
+input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+  min-height: 1.25rem;
+}
+
+/* Phones and tablets: iPhone Safari zooms the whole page when a box with text smaller than 16px is tapped, and stays zoomed.
+   16px stops that. It is for every touch screen (pointer: coarse) at ANY width, not only narrow ones: a phone turned sideways,
+   an iPad and "Request Desktop Website" are all wider than 767px. (!important: the text size of a box is set by a class on each of them.) */
+@media (max-width: 767px), (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* A quick second tap on a button (+ / -, Pick all...) must not zoom the page in. Pinching still zooms. */
+html {
+  touch-action: manipulation;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

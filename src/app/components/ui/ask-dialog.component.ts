@@ -4,7 +4,8 @@ import { CommonModule } from '@angular/common';
 /**
  * A plain Yes / No question (not a warning: for deleting use app-confirm-dialog). The person has to PICK: Esc and a click
  * on the dark background do nothing, so a question is never answered by accident. The page owns the logic and reacts to
- * (yes) and (no).
+ * (yes) and (no). A box to fill in (e.g. a new password) can be put inside it, under the grey line; give it its own top
+ * margin and use focus="content" to start in it.
  */
 @Component({
   selector: 'app-ask-dialog',
@@ -33,6 +34,7 @@ import { CommonModule } from '@angular/common';
         </div>
 
         <p *ngIf="detail" class="mt-3 rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-700">{{ detail }}</p>
+        <ng-content></ng-content>
         <p *ngIf="error" role="alert" class="mt-3 text-sm text-red-600">{{ error }}</p>
 
         <div class="mt-5 flex justify-end gap-2">
@@ -54,8 +56,9 @@ export class AskDialogComponent implements AfterViewInit {
   @Input() detail = '';
   @Input() yesLabel = 'Yes';
   @Input() noLabel = 'No';
-  /** Which button has the focus when the question opens. The safe one is "no" when yes changes something. */
-  @Input() focus: 'yes' | 'no' = 'yes';
+  /** Which button has the focus when the question opens. The safe one is "no" when yes changes something.
+   *  "content" = the first box inside (see above). */
+  @Input() focus: 'yes' | 'no' | 'content' = 'yes';
   /** True while the answer is being carried out: both buttons are off. */
   @Input() busy = false;
   /** Shown in red when carrying out the answer failed (the question stays open). */
@@ -67,7 +70,13 @@ export class AskDialogComponent implements AfterViewInit {
   @ViewChild('yesButton') private yesButton?: ElementRef<HTMLButtonElement>;
   @ViewChild('noButton') private noButton?: ElementRef<HTMLButtonElement>;
 
+  constructor(private host: ElementRef<HTMLElement>) { }
+
   ngAfterViewInit(): void {
+    if (this.focus === 'content') {
+      this.host.nativeElement.querySelector<HTMLElement>('input, textarea, select')?.focus();
+      return;
+    }
     (this.focus === 'no' ? this.noButton : this.yesButton)?.nativeElement.focus();
   }
 }

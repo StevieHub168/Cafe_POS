@@ -13,14 +13,12 @@ import { StatusBadgeComponent } from '../ui/status-badge.component';
 import { ConfirmDialogComponent } from '../ui/confirm-dialog.component';
 import { AskDialogComponent } from '../ui/ask-dialog.component';
 import { BookingFormComponent, BookingSaved } from './booking-form.component';
-import { BookingShareDialogComponent } from './booking-share-dialog.component';
 import { BookingPickupComponent } from './booking-pickup.component';
 import { InvoiceEditorComponent } from '../invoices/invoice-editor.component';
 import { InvoiceViewerComponent } from '../invoices/invoice-viewer.component';
 import { InvoiceSaved } from '../invoices/invoice-form.component';
+import { PhotoStripComponent } from '../ui/photo-strip.component';
 import { ImgSrcPipe } from '../../pipes/img-src.pipe';
-import { bookingDetailsText } from '../../utils/booking-text';
-import { copyToClipboard } from '../../utils/clipboard';
 import { ScanActionService } from '../../services/scan-action.service';
 import { daysFromToday, formatDate, todayIso, weekdayName } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
@@ -33,7 +31,7 @@ type Filter = BookingStatus | 'all';
 @Component({
   selector: 'app-bookings',
   standalone: true,
-  imports: [CommonModule, FormsModule, PageHeaderComponent, StatusBadgeComponent, ConfirmDialogComponent, AskDialogComponent, BookingFormComponent, BookingShareDialogComponent, BookingPickupComponent, InvoiceEditorComponent, InvoiceViewerComponent, ImgSrcPipe],
+  imports: [CommonModule, FormsModule, PageHeaderComponent, StatusBadgeComponent, ConfirmDialogComponent, AskDialogComponent, BookingFormComponent, BookingPickupComponent, InvoiceEditorComponent, InvoiceViewerComponent, PhotoStripComponent, ImgSrcPipe],
   templateUrl: './bookings.component.html',
   styleUrl: './bookings.component.css'
 })
@@ -44,13 +42,13 @@ export class BookingsComponent implements OnInit {
   isLoading = true;
   errorMessage = '';
 
-  // Notice after an action (saved, copied...). After a save it also offers "Copy details" for that booking.
+  // Notice after an action (saved, cancelled...).
   successMessage = '';
-  savedBooking: Booking | null = null;
   private successTimer: ReturnType<typeof setTimeout> | undefined;
 
   // Filter
-  readonly tabs: { value: Filter; label: string }[] = [{ value: 'all', label: 'All' }, ...BOOKING_STATUSES];
+  // (No "Picked up" tab: a booking that was picked up became a Sale, and leaves this page.)
+  readonly tabs: { value: Filter; label: string }[] = [{ value: 'all', label: 'All' }, ...BOOKING_STATUSES.filter(s => s.value !== 'picked_up')];
   statusFilter: Filter = 'all';
   searchQuery = '';
 
@@ -67,8 +65,6 @@ export class BookingsComponent implements OnInit {
 
   // Invoices: a booking can have ONE invoice (the paper). The button says "Invoice" until it exists, then "View invoice".
   private invoiceByBooking = new Map<number, Invoice>();
-  /** Every invoice by its id: a picked-up booking opens the Sale it became. */
-  private invoicesById = new Map<number, Invoice>();
   /** The invoice writing window: null = closed. `prefill` starts a new one from a booking; `invoice` changes an existing one. */
   invoicing: { prefill: Partial<Invoice> | null; invoice: Invoice | null } | null = null;
   /** The invoice shown as paper (with Print...): null = closed. */
@@ -81,9 +77,6 @@ export class BookingsComponent implements OnInit {
   cancelTarget: Booking | null = null;
   isCancelling = false;
   cancelError = '';
-
-  /** The "Send to customer" window (message + laptop photo + invoice picture): null = closed. */
-  sendingDetails: { booking: Booking; invoice: Invoice | null; textCopied: boolean } | null = null;
 
   constructor(
     private bookingService: BookingService,
@@ -124,7 +117,7 @@ export class BookingsComponent implements OnInit {
   /** Esc closes the top-most thing: the delete box, then the drawer. */
   @HostListener('document:keydown.escape')
   onEscape(): void {
-    if (this.invoicing || this.viewingInvoice || this.sendingDetails || this.pickingUp || this.cancelTarget) return;      // those windows close themselves (or must be answered)
+    if (this.invoicing || this.viewingInvoice || this.pickingUp || this.cancelTarget) return;      // those windows close themselves (or must be answered)
     if (this.deleteTarget) this.cancelDelete();
     else if (this.showDrawer) this.closeDrawer();
   }
@@ -134,7 +127,9 @@ export class BookingsComponent implements OnInit {
   loadBookings(): void {
     this.bookingService.getBookings().subscribe({
       next: (bookings) => {
-        this.bookings = bookings;
+        // Once the customer picked the laptop up, it is a Sale: it is not kept in the list of bookings. (The record stays behind
+        // the scenes, so the Sale and the Telegram clean-up can still find it.)
+        this.bookings = bookings.filter(b => b.status !== 'picked_up');
         this.isLoading = false;
         this.runScanAction();
       },
@@ -229,17 +224,16 @@ export class BookingsComponent implements OnInit {
     this.loadProducts();
     if (result.created && result.booking.status === 'booked') this.telegram.send('booking', result.booking.id);   // "Booking Details" with the laptop photo
     const note = holdChangeNote(result.created ? null : this.editingBooking, result.booking, 'booking');
-    this.showSuccess([result.created ? 'Booking saved.' : 'Changes saved.', note].filter(Boolean).join(' '), result.booking);
+    this.showSuccess([result.created ? 'Booking saved.' : 'Changes saved.', note].filter(Boolean).join(' '));
   }
 
   // ---------- invoices (made from a booking) ----------
 
-  /** Which bookings already have an invoice, and the Sales that bookings became. If this fails the buttons just say "Invoice". */
+  /** Which bookings already have an invoice. If this fails the buttons just say "Invoice". */
   private loadInvoices(): void {
     this.invoiceService.getInvoices().subscribe({
       next: (invoices) => {
         this.invoiceByBooking = new Map(invoices.filter(i => i.type === 'booking' && i.booking_id !== null).map(i => [i.booking_id as number, i]));
-        this.invoicesById = new Map(invoices.filter(i => i.id !== undefined).map(i => [i.id as number, i]));
       },
       error: () => { /* the buttons still work */ }
     });
@@ -285,27 +279,12 @@ export class BookingsComponent implements OnInit {
     return this.bookings.filter(b => b.status === 'booked').length;
   }
 
-  /** The deposits of those bookings: money the shop is holding. */
-  get depositsHeld(): number {
-    return Math.round(this.bookings.filter(b => b.status === 'booked').reduce((sum, b) => sum + b.deposit, 0) * 100) / 100;
-  }
-
-  /** What will be collected when those customers come. */
-  get balanceToCollect(): number {
-    return Math.round(this.bookings.filter(b => b.status === 'booked').reduce((sum, b) => sum + this.remainingOf(b), 0) * 100) / 100;
-  }
-
   // ---------- the customer picks the laptop up (the booking becomes a Sale) ----------
 
   /** The main button of a booked card: "Customer picked up · collect $550". */
   pickupLabel(booking: Booking): string {
     const left = this.remainingOf(booking);
     return left > 0 ? `Customer picked up · collect ${formatMoney(left)}` : 'Customer picked up';
-  }
-
-  /** "000036" for the Sale a booking became. */
-  saleNumber(booking: Booking): string {
-    return formatInvoiceNumber(booking.sale_invoice_number);
   }
 
   startPickup(booking: Booking): void {
@@ -335,12 +314,6 @@ export class BookingsComponent implements OnInit {
   closePickup(): void {
     this.pickingUp = null;
     this.loadBookings();
-  }
-
-  /** "Became Sale 000036 →": the paper of the Sale this booking turned into. */
-  openSale(booking: Booking): void {
-    const sale = booking.sale_invoice_id ? this.invoicesById.get(booking.sale_invoice_id) : undefined;
-    if (sale) this.viewingInvoice = sale;
   }
 
   // ---------- cancel a booking (it stays in the list as "Cancelled") ----------
@@ -377,32 +350,6 @@ export class BookingsComponent implements OnInit {
       },
       error: (err) => (this.cancelError = this.messageFrom(err, 'Failed to cancel the booking.'))
     });
-  }
-
-  /**
-   * "Copy details": puts the booking on the clipboard as the message to send (see bookingDetailsText), like always.
-   * When there is also a photo of the laptop or an invoice to send, the "Send to customer" window opens as well:
-   * a clipboard holds only one thing, so that window sends the message, the photo and the invoice together.
-   */
-  async copyDetails(booking: Booking): Promise<void> {
-    const copied = await this.copyText(bookingDetailsText(booking));
-    if (copied) this.showSuccess('Booking details copied. Paste them into Telegram.');
-    else this.errorMessage = 'Could not copy. Please try again.';
-
-    const invoice = this.invoiceFor(booking) ?? null;
-    if (booking.product_image || invoice) this.sendingDetails = { booking, invoice, textCopied: copied };
-  }
-
-  /** From the "Send to customer" window: there is no invoice yet, so write it first. */
-  makeInvoiceToSend(): void {
-    const sending = this.sendingDetails;
-    if (!sending) return;
-    this.sendingDetails = null;
-    this.openInvoice(sending.booking);
-  }
-
-  protected copyText(text: string): Promise<boolean> {
-    return copyToClipboard(text);
   }
 
   // ---------- delete ----------
@@ -451,14 +398,10 @@ export class BookingsComponent implements OnInit {
 
   // ---------- small helpers ----------
 
-  private showSuccess(message: string, saved: Booking | null = null): void {
+  private showSuccess(message: string): void {
     this.successMessage = message;
-    this.savedBooking = saved;
     clearTimeout(this.successTimer);
-    this.successTimer = setTimeout(() => {
-      this.successMessage = '';
-      this.savedBooking = null;
-    }, saved ? 10000 : 4000);                  // a save stays a bit longer: there is a button in it
+    this.successTimer = setTimeout(() => (this.successMessage = ''), 4000);
   }
 
   private messageFrom(err: any, fallback: string): string {

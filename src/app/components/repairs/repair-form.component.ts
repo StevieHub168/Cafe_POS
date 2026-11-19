@@ -1,11 +1,13 @@
-import { Component, EventEmitter, HostListener, Input, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, HostListener, Input, OnInit, Output, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { RepairService } from '../../services/repair.service';
-import { MAX_REPAIR_DEVICE, MAX_REPAIR_PROBLEM, Repair, RepairInput } from '../../models/repair.model';
+import { MAX_REPAIR_DEVICE, MAX_REPAIR_PHOTOS, MAX_REPAIR_PROBLEM, Repair, RepairInput } from '../../models/repair.model';
 import { Invoice, Warranty, formatInvoiceNumber } from '../../models/invoice.model';
 import { Product } from '../../models/product.model';
+import { PhotoUploadComponent } from '../ui/photo-upload.component';
+import { ProductSearchComponent } from '../ui/product-search.component';
 import { formatDate, todayIso, weekdayName } from '../../utils/dates';
 import { warrantyText } from '../../utils/warranty';
 
@@ -33,6 +35,7 @@ interface RepairFormValues {
   back_on: string;
   cost: number | null;
   sale_invoice_id: number | null;
+  images: string[];
   makeInvoice: boolean;
 }
 
@@ -55,7 +58,7 @@ const digits = (text: string | null | undefined) => (text ?? '').replace(/\D/g, 
 @Component({
   selector: 'app-repair-form',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, PhotoUploadComponent, ProductSearchComponent],
   templateUrl: './repair-form.component.html',
   styles: [`
     .repair-backdrop { animation: repair-fade 150ms ease-out; }
@@ -84,6 +87,10 @@ export class RepairFormComponent implements OnInit {
 
   readonly maxDevice = MAX_REPAIR_DEVICE;
   readonly maxProblem = MAX_REPAIR_PROBLEM;
+  readonly maxPhotos = MAX_REPAIR_PHOTOS;
+  @ViewChild(PhotoUploadComponent) private photoBox?: PhotoUploadComponent;
+  /** A photo is still being uploaded: wait before saving. */
+  uploading = false;
 
   form: RepairFormValues = this.emptyValues();
   isSubmitting = false;
@@ -106,7 +113,7 @@ export class RepairFormComponent implements OnInit {
   private emptyValues(): RepairFormValues {
     return {
       source: 'customer', product_id: null, device: '', customer_name: '', phone: '', telegram: '', problem: '',
-      received_date: this.today, back_on: '', cost: null, sale_invoice_id: null, makeInvoice: false
+      received_date: this.today, back_on: '', cost: null, sale_invoice_id: null, images: [], makeInvoice: false
     };
   }
 
@@ -123,6 +130,7 @@ export class RepairFormComponent implements OnInit {
       back_on: repair.back_on ?? '',
       cost: repair.cost,
       sale_invoice_id: repair.sale_invoice_id,
+      images: [...(repair.images ?? [])],
       makeInvoice: false
     };
   }
@@ -142,22 +150,16 @@ export class RepairFormComponent implements OnInit {
 
   // ---------- whose laptop ----------
 
+  /** Whose laptop: what is typed in the box is never lost when this is switched, either way. */
   chooseSource(source: Source): void {
     if (this.form.source === source) return;
     this.form.source = source;
     if (source === 'customer') {
-      this.form.product_id = null;
+      this.form.product_id = null;                  // the name stays, to be changed
     } else {
-      // back to the shop's laptops: the device is the laptop that is picked (or nothing until one is)
-      const picked = this.shopLaptops.find(p => p.id === this.form.product_id);
-      this.form.device = picked ? picked.name.slice(0, this.maxDevice) : '';
-      if (!picked) this.form.product_id = null;
+      // back to the shop's laptops: the name stays too; when it is exactly one of the shop's laptops, that one is picked again
+      this.form.product_id = this.shopLaptops.find(p => sameName(p.name, this.form.device))?.id ?? null;
     }
-  }
-
-  /** A laptop that is booked or in repair says so in the list. */
-  laptopLabel(laptop: Product): string {
-    return laptop.hold_status === 'booked' ? `${laptop.name} (booked)` : laptop.hold_status === 'repair' ? `${laptop.name} (in repair)` : laptop.name;
   }
 
   /** The laptop of the shop that is picked (null = none, or a customer's laptop). */
@@ -165,29 +167,24 @@ export class RepairFormComponent implements OnInit {
     return this.form.source === 'shop' && this.form.product_id !== null ? this.shopLaptops.find(p => p.id === this.form.product_id) ?? null : null;
   }
 
-  /**
-   * What saving will do to the laptop of the shop ('' = nothing): a repair that is 'received' takes it off the shelf.
-   * Counted stock goes down by one; a single laptop is set aside as "In repair" until it is fixed.
-   */
-  get holdNote(): string {
+  /** Said under the box only when the laptop is already in repair for someone else ('' = fine). A booked laptop may be repaired. */
+  get holdBlockedNote(): string {
     const laptop = this.pickedLaptop;
-    if (!laptop || (this.repair && this.repair.status !== 'received')) return '';
+    if (!laptop || laptop.track_stock || (this.repair && this.repair.status !== 'received')) return '';
     const own = !!this.repair?.stock_held && this.repair.product_id === laptop.id;
-    if (laptop.track_stock) {
-      if (own) return 'One laptop is taken from stock while it is in repair.';
-      return laptop.stock_quantity > 0 ? `One will be taken from stock (${laptop.stock_quantity} now).` : 'None left in stock, so nothing is taken.';
-    }
-    if (own) return 'This laptop is set aside while it is in repair.';
-    if (laptop.hold_status === 'booked') return 'This laptop is booked: it stays set aside for the booking.';
-    if (laptop.hold_status === 'repair') return 'This laptop is already in repair.';
-    return 'This laptop will be set aside (off the Menu) until it is fixed.';
+    return !own && laptop.hold_status === 'repair' ? 'This laptop is already in repair.' : '';
   }
 
-  /** A laptop picked from the list: its name is the device. */
-  pickLaptop(): void {
-    const picked = this.shopLaptops.find(p => p.id === Number(this.form.product_id));
-    this.form.product_id = picked?.id ?? null;
-    this.form.device = picked ? picked.name.slice(0, this.maxDevice) : '';
+  /** The box was typed in: the laptop is not picked any more until one is chosen from the list again. */
+  onLaptopText(text: string): void {
+    this.form.device = text;
+    this.form.product_id = null;
+  }
+
+  /** A laptop chosen from the list: its name is the device. */
+  pickLaptop(laptop: Product): void {
+    this.form.product_id = laptop.id ?? null;
+    this.form.device = laptop.name.slice(0, this.maxDevice);
   }
 
   // ---------- the Sale of this laptop (warranty) ----------
@@ -248,7 +245,7 @@ export class RepairFormComponent implements OnInit {
   }
 
   submit(): void {
-    if (this.isSubmitting) return;
+    if (this.isSubmitting || this.uploading) return;
     this.formError = this.problem();
     if (this.formError) return;
 
@@ -264,7 +261,8 @@ export class RepairFormComponent implements OnInit {
       back_on: f.back_on || null,
       cost: f.cost === null || String(f.cost) === '' ? null : Number(f.cost),
       status: this.repair?.status ?? 'received',
-      sale_invoice_id: this.sale?.id ?? null
+      sale_invoice_id: this.sale?.id ?? null,
+      images: [...f.images]
     };
 
     const editing = this.repair?.id;
@@ -274,7 +272,10 @@ export class RepairFormComponent implements OnInit {
 
     this.isSubmitting = true;
     request.pipe(finalize(() => (this.isSubmitting = false))).subscribe({
-      next: (repair) => this.saved.emit({ repair, created: !this.repair, makeInvoice: !this.repair && f.makeInvoice }),
+      next: (repair) => {
+        this.photoBox?.markSaved();                // the photos now belong to the repair
+        this.saved.emit({ repair, created: !this.repair, makeInvoice: !this.repair && f.makeInvoice });
+      },
       error: (err) => (this.formError = err?.error?.error || 'Failed to save the repair.')
     });
   }

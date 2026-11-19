@@ -78,8 +78,8 @@ const namesOf = (text: string | null | undefined): string[] => [key(text), key((
           </div>
         </article>
 
-        <!-- where it is now -->
-        <section class="space-y-3 rounded-xl border bg-white p-4" [ngClass]="style.border" data-status [attr.data-state]="state">
+        <!-- where it is now (not shown for a plain available laptop: the Sell button already says it) -->
+        <section *ngIf="showStatus" class="space-y-3 rounded-xl border bg-white p-4" [ngClass]="style.border" data-status [attr.data-state]="state">
           <div class="flex items-center justify-between gap-3">
             <span class="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-bold" [ngClass]="style.pill" data-badge>
               <span class="h-2 w-2 rounded-full" [ngClass]="style.dot"></span>{{ label }}
@@ -112,8 +112,6 @@ const namesOf = (text: string | null | undefined): string[] => [key(text), key((
               <button type="button" (click)="start('repair')" data-action="repair"
                 class="inline-flex h-12 items-center justify-center rounded-xl border border-surface-border bg-white px-4 text-base font-semibold text-gray-900 hover:bg-gray-50">Repair</button>
             </div>
-            <button type="button" (click)="printLabel()" data-action="label"
-              class="inline-flex h-10 w-full items-center justify-center text-sm font-semibold text-primary-700 hover:underline">Print label</button>
           </ng-container>
 
           <ng-container *ngIf="state === 'booked'">
@@ -261,6 +259,12 @@ export class LaptopScanComponent implements OnInit, OnDestroy {
     return !!p && this.state === 'available' && !!p.track_stock && p.stock_quantity <= 0;
   }
 
+  /** The status card: always for a booked, repaired or sold laptop. For an available one only when its stock is counted (how many are left matters). */
+  get showStatus(): boolean {
+    const p = this.product;
+    return !!p && (this.state !== 'available' || !!p.track_stock);
+  }
+
   get label(): string {
     if (this.outOfStock) return 'Out of stock';
     return { available: 'Available', booked: 'Booked', repair: 'In repair', sold: 'Sold' }[this.state];
@@ -390,11 +394,6 @@ export class LaptopScanComponent implements OnInit, OnDestroy {
     if (id === undefined) return;
     this.scan.ask({ kind: 'pickup', bookingId: id });
     this.router.navigate(['/bookings']);
-  }
-
-  printLabel(): void {
-    const id = this.product?.id;
-    if (id !== undefined) this.router.navigate(['/labels'], { queryParams: { ids: id, per: 2 } });
   }
 
   go(path: string): void {

@@ -20,10 +20,9 @@
   </div>
 
   <!-- The numbers -->
-  <div class="grid grid-cols-1 gap-3 sm:grid-cols-3" data-summary>
+  <div class="grid grid-cols-1 gap-3 sm:grid-cols-2" data-summary>
     <div class="rounded-xl border border-surface-border bg-white px-4 py-3.5"><p class="text-xs text-gray-500">In the shop now</p><p class="mt-0.5 text-2xl font-bold tabular-nums text-gray-900" data-in-shop>{{ inShop }}</p></div>
     <div class="rounded-xl border bg-white px-4 py-3.5" [ngClass]="waitingForPickup > 0 ? 'border-amber-200' : 'border-surface-border'"><p class="text-xs text-gray-500">Fixed, waiting for pickup</p><p class="mt-0.5 text-2xl font-bold tabular-nums text-gray-900" data-waiting>{{ waitingForPickup }}</p></div>
-    <div class="rounded-xl border border-surface-border bg-white px-4 py-3.5"><p class="text-xs text-gray-500">Money to collect</p><p class="mt-0.5 text-2xl font-bold tabular-nums text-gray-900" data-money>{{ money(moneyToCollect) }}</p></div>
   </div>
 
   <!-- Step tabs + search -->
@@ -93,6 +92,9 @@
         </div>
         <p *ngIf="warrantyLine(repair) as line" class="col-span-2 text-xs font-medium text-green-800" data-warranty>{{ line }}</p>
       </div>
+
+      <!-- Photos of what is wrong: click one to see it big -->
+      <app-photo-strip [photos]="repair.images"></app-photo-strip>
 
       <!-- Actions: the main one moves the repair to its next step -->
       <div class="mt-auto flex items-center gap-2 border-t border-gray-100 px-3 py-2.5">

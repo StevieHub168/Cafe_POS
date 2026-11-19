@@ -64,7 +64,7 @@ export class TelegramNotifier {
     this.telegram.send(kind, id, picture).subscribe({
       next: (answer) => {
         toast.state = 'sent';
-        toast.text = `${WHAT[kind]} sent to Telegram.${answer.withoutPhotos ? ' The photo could not be sent.' : ''}`;
+        toast.text = `${WHAT[kind]} sent to Telegram.${answer.withoutPhotos ? ' The photo could not be sent.' : ''}${answer.removedBooking ? ' The booking message was removed.' : ''}`;
         this.again.delete(toast.id);
         this.timers.set(toast.id, setTimeout(() => this.dismiss(toast), 5000));
       },

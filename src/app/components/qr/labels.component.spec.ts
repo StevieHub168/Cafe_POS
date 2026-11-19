@@ -5,6 +5,7 @@ import { LabelsComponent } from './labels.component';
 import { ProductService } from '../../services/product.service';
 import { ConfigService } from '../../services/config.service';
 import { Product } from '../../models/product.model';
+import { rollPreviewSize } from '../../utils/label-sheet';
 
 const laptop = (id: number, name: string, code: string | undefined, over: Partial<Product> = {}): Product => ({
   id, sku: `S-${id}`, code, name, category_id: 1, selling_price: 100, stock_quantity: 1, min_stock_level: 0, is_archived: false, ...over,
@@ -44,10 +45,28 @@ describe('LabelsComponent (Print labels)', () => {
   const box = (code: string) => dom().querySelector(`input[data-code="${code}"]`) as HTMLInputElement;
   const sheet = () => new DOMParser().parseFromString((dom().querySelector('iframe') as HTMLIFrameElement).srcdoc, 'text/html');
 
-  it('lists the laptops that have a code, A-Z, with the code beside each', async () => {
+  it('lists the laptops that have a code, A-Z, with the code beside the name (the specs under them have the whole width)', async () => {
     await open();
     const rows = Array.from(dom().querySelectorAll('fieldset label')).map(l => (l.textContent ?? '').replace(/\s+/g, ' ').trim());
-    expect(rows).toEqual(['Dell XPS 13Core i7 · Ram 16GB | SSD 512GBLP-0003', 'MacBook Air 13" M1Air 13LP-0001']);       // A-Z (spaces between the tags are not text)
+    expect(rows).toEqual(['Dell XPS 13LP-0003Core i7 · Ram 16GB | SSD 512GB', 'MacBook Air 13" M1LP-0001Air 13']);       // A-Z (spaces between the tags are not text)
+    const row = dom().querySelector('fieldset label') as HTMLElement;
+    const name = row.querySelector('[data-name]') as HTMLElement;
+    const code = row.querySelector('span.font-mono') as HTMLElement;
+    const specs = row.querySelector('[data-specs]') as HTMLElement;
+    expect(Math.abs(name.getBoundingClientRect().top - code.getBoundingClientRect().top)).toBeLessThan(8);       // same line
+    expect(specs.getBoundingClientRect().top).toBeGreaterThan(name.getBoundingClientRect().bottom - 2);          // specs under both
+  });
+
+  it('says how many laptops are picked next to "Laptops", with Pick all / Pick none beside it', async () => {
+    await open();
+    expect(dom().querySelector('[data-picked]')).toBeNull();                       // nothing picked: nothing to say
+    box('LP-0003').click();
+    fixture.detectChanges();
+    expect(dom().querySelector('[data-picked]')!.textContent!.trim()).toBe('· 1 picked');
+    (Array.from(dom().querySelectorAll('button')).find(b => b.textContent!.trim() === 'Pick all') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(dom().querySelector('[data-picked]')!.textContent!.trim()).toBe('· 2 picked');
+    expect(dom().querySelector('fieldset legend')!.textContent!.trim()).toBe('Laptops');         // still the name of the group for a screen reader
   });
 
   it('shows the photo of each laptop, so two laptops of the same name can be told apart (a grey box when there is none)', async () => {
@@ -57,6 +76,22 @@ describe('LabelsComponent (Print labels)', () => {
     expect(photos[0].querySelector('img')!.getAttribute('src')).toContain('/uploads/dell.png');       // the cover: the first photo
     expect(photos[1].querySelector('img')).toBeNull();
     expect(photos[1].classList).toContain('bg-gray-100');
+  });
+
+  it('the printed label has the specs of the laptop (one short line each) under its code', async () => {
+    await open({ ids: '3,1', per: '1' });
+    const labels = Array.from(sheet().querySelectorAll('.label'));
+    expect(labels.map(l => Array.from(l.querySelectorAll('.specs div')).map(d => d.textContent))).toEqual([
+      ['Core i7', 'Ram 16GB', 'SSD 512GB', 'OLED screen'],       // the Dell: the 4 lines of its description
+      [],                                                        // the MacBook has no description: nothing is printed for it
+    ]);
+  });
+
+  it('the printed label has the selling price of the laptop, on the laptop label and the charger label', async () => {
+    await open({ ids: '3', per: '2' });
+    const labels = Array.from(sheet().querySelectorAll('.label'));
+    expect(labels.length).toBe(2);
+    expect(labels.map(l => l.querySelector('.price')!.textContent)).toEqual(['$100', '$100']);      // the test laptops cost 100
   });
 
   it('shows the specs under the name (the first two lines of the description), or the model when there are none', async () => {
@@ -153,20 +188,95 @@ describe('LabelsComponent (Print labels)', () => {
     expect(printButton().textContent!.trim()).toBe('Print 2 labels');
   });
 
-  it('the label size changes the sheet', async () => {
+  it('starts on a 60 x 40 mm label roll (the shop\'s label printer)', async () => {
     await open({ ids: '1' });
-    expect(new DOMParser().parseFromString((dom().querySelector('iframe') as HTMLIFrameElement).srcdoc, 'text/html').head.textContent).toContain('width: 50mm; height: 30mm;');
-    const select = dom().querySelector('#label-size') as HTMLSelectElement;
-    select.value = '40x25';
-    select.dispatchEvent(new Event('change'));
-    fixture.detectChanges();
-    expect((dom().querySelector('iframe') as HTMLIFrameElement).srcdoc).toContain('width: 40mm; height: 25mm;');
+    expect(component.paper).toBe('roll');
+    expect(component.size).toBe('60x40');
+    expect((dom().querySelector('#label-size') as HTMLSelectElement).value).toBe('60x40');
+    const sizes = Array.from(dom().querySelectorAll('#label-size option')).map(o => o.textContent!.trim());
+    expect(sizes).toEqual(['60 × 40 mm', '40 × 30 mm']);
+    expect(dom().querySelector('[data-paper="roll"]')!.getAttribute('aria-pressed')).toBe('true');
+    expect(dom().querySelector('[data-paper="sheet"]')!.getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('says how many sheets of paper the labels need', async () => {
+  it('the label size changes the sheet', async () => {
+    await open({ ids: '1' });
+    expect(new DOMParser().parseFromString((dom().querySelector('iframe') as HTMLIFrameElement).srcdoc, 'text/html').head.textContent).toContain('width: 60mm; height: 40mm;');
+    const select = dom().querySelector('#label-size') as HTMLSelectElement;
+    select.value = '40x30';
+    select.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+    expect((dom().querySelector('iframe') as HTMLIFrameElement).srcdoc).toContain('width: 40mm; height: 30mm;');
+  });
+
+  describe('Print on: a label roll or an A4 sticker sheet', () => {
+    const srcdoc = () => (dom().querySelector('iframe') as HTMLIFrameElement).srcdoc;
+    const choose = (paper: 'roll' | 'sheet') => { (dom().querySelector(`[data-paper="${paper}"]`) as HTMLButtonElement).click(); fixture.detectChanges(); };
+
+    it('a roll prints one label on each page, the size of the label; the sheet is A4', async () => {
+      await open({ ids: '1' });
+      expect(srcdoc()).toContain('@page { size: 60mm 40mm; margin: 0; }');
+      choose('sheet');
+      expect(srcdoc()).toContain('@page { size: A4 portrait; margin: 10mm; }');
+      expect(dom().querySelector('[data-paper="sheet"]')!.getAttribute('aria-pressed')).toBe('true');
+      choose('roll');
+      expect(srcdoc()).toContain('@page { size: 60mm 40mm; margin: 0; }');
+    });
+
+    it('on a roll it says what to choose in the Print window (the size changes with the label size); not on the sheet', async () => {
+      await open({ ids: '1' });
+      expect(dom().querySelector('[data-roll-hint]')!.textContent).toContain('paper size 60 × 40 mm');
+      const select = dom().querySelector('#label-size') as HTMLSelectElement;
+      select.value = '40x30';
+      select.dispatchEvent(new Event('change'));
+      fixture.detectChanges();
+      expect(dom().querySelector('[data-roll-hint]')!.textContent).toContain('paper size 40 × 30 mm');
+      choose('sheet');
+      expect(dom().querySelector('[data-roll-hint]')).toBeNull();
+    });
+
+    it('the 40 x 30 mm roll (the other one): its page size, and the hint names it', async () => {
+      await open({ ids: '1' });
+      const select = dom().querySelector('#label-size') as HTMLSelectElement;
+      select.value = '40x30';
+      select.dispatchEvent(new Event('change'));
+      fixture.detectChanges();
+      expect(srcdoc()).toContain('@page { size: 40mm 30mm; margin: 0; }');
+      expect(dom().querySelector('[data-roll-hint]')!.textContent).toContain('paper size 40 × 30 mm');
+      expect(dom().querySelector('[data-pages]')!.textContent).toContain('40 × 30 mm');
+    });
+
+    it('the line under the preview: how many labels on a roll', async () => {
+      await open({ ids: '1,3' });
+      expect(dom().querySelector('[data-pages]')!.textContent!.trim()).toBe('Preview · 4 labels, one on each page · 60 × 40 mm');
+      (dom().querySelector('[data-per="1"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(dom().querySelector('[data-pages]')!.textContent!.trim()).toBe('Preview · 2 labels, one on each page · 60 × 40 mm');
+      await (async () => { TestBed.resetTestingModule(); })();
+      await open({ ids: '1', per: '1' });
+      expect(dom().querySelector('[data-pages]')!.textContent!.trim()).toBe('Preview · 1 label, one on each page · 60 × 40 mm');
+    });
+
+    it('nothing picked on a roll: just "label roll"', async () => {
+      await open();
+      expect(dom().querySelector('[data-pages]')!.textContent!.trim()).toBe('Preview · label roll');
+    });
+
+    it('Print still prints the page of the labels, only when something is picked, whichever paper', async () => {
+      await open({ ids: '1' });
+      printButton().click();
+      choose('sheet');
+      printButton().click();
+      expect(printed).toBe(2);
+    });
+  });
+
+  it('says how many sheets of paper the labels need (A4 sticker sheet)', async () => {
     const many = Array.from({ length: 14 }, (_, i) => laptop(i + 1, `Laptop ${i + 1}`, `LP-${String(i + 1).padStart(4, '0')}`));
     await open({ ids: many.map(l => l.id).join(','), per: '2' }, undefined, of(many));
-    expect(dom().querySelector('[data-pages]')!.textContent).toContain('page 1 of 2');       // 28 labels, 24 on a sheet
+    (dom().querySelector('[data-paper="sheet"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(dom().querySelector('[data-pages]')!.textContent).toContain('page 1 of 2');       // 28 labels, 18 on a sheet
     (dom().querySelector('[data-per="1"]') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(dom().querySelector('[data-pages]')!.textContent).toContain('page 1 of 1');       // 14 labels
@@ -194,8 +304,69 @@ describe('LabelsComponent (Print labels)', () => {
     expect(dom().querySelector('[data-address-warning]')).toBeNull();
   });
 
-  it('the preview page shrinks to the width it has, so it fits a phone and keeps the A4 shape', async () => {
+  it('the print bar is at the bottom of a phone screen and part of the panel on a big screen', async () => {
     await open({ ids: '1' });
+    const bar = dom().querySelector('[data-print-bar]') as HTMLElement;
+    expect(bar.classList).toContain('fixed');
+    expect(bar.classList).toContain('bottom-0');
+    expect(bar.classList).toContain('lg:static');
+    expect(bar.contains(printButton())).toBeTrue();
+  });
+
+  describe('the preview', () => {
+    const preview = () => dom().querySelector('[data-preview]') as HTMLElement;
+    const frame = () => dom().querySelector('iframe') as HTMLIFrameElement;
+    const scale = () => Number(/scale\(([\d.]+)\)/.exec(frame().style.transform)?.[1]);
+    const until = async (done: () => boolean) => { for (let i = 0; i < 80 && !done(); i++) await new Promise(r => setTimeout(r, 25)); };
+
+    it('a label roll shows just the labels, one under the other, as big as they are shown (no empty A4 paper)', async () => {
+      await open({ ids: '1,3', per: '2' });
+      const one = rollPreviewSize('60x40', 1);
+      const four = rollPreviewSize('60x40', 4);
+      expect(frame().style.width).toBe(`${four.width}px`);
+      expect(frame().style.height).toBe(`${four.height}px`);
+      expect(four.height).toBeGreaterThan(one.height * 3);                         // 4 labels are taller than 1
+      expect(preview().style.maxWidth).toBe(`${four.width}px`);                    // never bigger than it really is
+      expect(preview().style.aspectRatio.replace(/\s/g, '')).toBe(`${four.width}/${four.height}`);
+    });
+
+    it('the roll preview grows with the number of labels, and follows the label size', async () => {
+      await open({ ids: '1', per: '1' });
+      const before = frame().style.height;
+      (dom().querySelector('[data-per="2"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(parseFloat(frame().style.height)).toBeGreaterThan(parseFloat(before));
+      const select = dom().querySelector('#label-size') as HTMLSelectElement;
+      select.value = '40x30';
+      select.dispatchEvent(new Event('change'));
+      fixture.detectChanges();
+      expect(frame().style.width).toBe(`${rollPreviewSize('40x30', 2).width}px`);
+    });
+
+    it('the roll preview shrinks to the width it has (a phone), but is never made bigger than it is', async () => {
+      await open({ ids: '1' });
+      const page = rollPreviewSize('60x40', 2);
+      preview().style.width = '300px';                                  // a phone
+      preview().style.maxWidth = 'none';
+      await until(() => Math.abs(scale() - 300 / page.width) < 0.001);
+      expect(scale()).toBeCloseTo(300 / page.width, 3);
+      expect(preview().clientHeight).toBeCloseTo(300 * page.height / page.width, -1);   // the shape of the labels, no empty paper under them
+    });
+
+    it('with nothing picked it says so inside the preview, one label high', async () => {
+      await open();
+      expect(dom().querySelector('[data-preview-empty]')!.textContent!.trim()).toBe('Pick a laptop to see its labels.');
+      expect(frame().style.height).toBe(`${rollPreviewSize('60x40', 0).height}px`);
+      box('LP-0001').click();
+      fixture.detectChanges();
+      expect(dom().querySelector('[data-preview-empty]')).toBeNull();
+    });
+  });
+
+  it('the preview of the A4 sticker sheet shrinks to the width it has, so it fits a phone and keeps the A4 shape', async () => {
+    await open({ ids: '1' });
+    (dom().querySelector('[data-paper="sheet"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
     const frame = dom().querySelector('iframe') as HTMLIFrameElement;
     const preview = dom().querySelector('[data-preview]') as HTMLElement;
     const scale = () => Number(/scale\(([\d.]+)\)/.exec(frame.style.transform)?.[1]);

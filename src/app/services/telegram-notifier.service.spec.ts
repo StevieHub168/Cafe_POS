@@ -60,6 +60,14 @@ describe('TelegramNotifier (how each message to Telegram goes)', () => {
     tick(6000);
   }));
 
+  it('says so when the Booking message of that laptop was taken down', fakeAsync(() => {
+    api.send.and.returnValue(of({ sent: true, group: 'sold', withoutPhotos: false, removedBooking: true }));
+    notifier.send('sold', 9, SALE);
+    flushMicrotasks();
+    expect(notifier.toasts[0].text).toBe('Sale sent to Telegram. The booking message was removed.');
+    tick(6000);
+  }));
+
   it('when Telegram says no: the sale is still saved, the reason is shown, and the box stays', fakeAsync(() => {
     api.send.and.returnValue(throwError(() => ({ error: { error: 'Bad Request: chat not found' } })));
     notifier.send('sold', 9, SALE);

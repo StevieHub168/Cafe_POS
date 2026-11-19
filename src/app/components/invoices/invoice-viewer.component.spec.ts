@@ -14,10 +14,6 @@ describe('InvoiceViewerComponent', () => {
   let closed: number;
   let edited: number;
   let printed: jasmine.Spy;
-  let png: jasmine.Spy;
-  let copied: jasmine.Spy;
-  let savedAs: jasmine.Spy;
-  const BLOB = new Blob(['png'], { type: 'image/png' });
 
   async function open(invoice: Invoice = SALE, width = 1440, height = 1000): Promise<void> {
     spyOnProperty(window, 'innerWidth', 'get').and.returnValue(width);
@@ -30,18 +26,14 @@ describe('InvoiceViewerComponent', () => {
     edited = 0;
     component.closed.subscribe(() => closed++);
     component.edit.subscribe(() => edited++);
-    // The four things that touch the browser are replaced (no real print dialog, clipboard or file is used).
+    // The print dialog is replaced (no real one is opened).
     printed = spyOn(component as any, 'printPaper').and.returnValue(Promise.resolve());
-    png = spyOn(component as any, 'makePng').and.returnValue(Promise.resolve(BLOB));
-    copied = spyOn(component as any, 'copyPng').and.returnValue(Promise.resolve(true));
-    savedAs = spyOn(component as any, 'savePng');
     fixture.detectChanges();
   }
 
   const dom = () => fixture.nativeElement as HTMLElement;
   const dialog = () => dom().querySelector('[role="dialog"]') as HTMLElement;
   const button = (label: string) => Array.from(dom().querySelectorAll('button')).find(b => b.textContent!.trim() === label) as HTMLButtonElement;
-  const message = () => (dom().querySelector('[role="status"], [role="alert"]')?.textContent ?? '').trim();
   const key = (name: string) => document.dispatchEvent(new KeyboardEvent('keydown', { key: name }));
   const settle = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); fixture.detectChanges(); };
 
@@ -75,9 +67,14 @@ describe('InvoiceViewerComponent', () => {
       expect(dialog().contains(hidden)).toBeFalse();               // not inside the window: it is never scaled
     });
 
-    it('has Print / Save PDF, Copy picture, Download picture and Edit', async () => {
+    it('has Print / Save PDF and Edit, and nothing else to press (no Copy picture, no Download picture)', async () => {
       await open();
-      for (const label of ['Print / Save PDF', 'Copy picture', 'Download picture', 'Edit']) expect(button(label)).toBeTruthy();
+      expect(button('Print / Save PDF')).toBeTruthy();
+      expect(button('Edit')).toBeTruthy();
+      expect(button('Copy picture')).toBeUndefined();
+      expect(button('Download picture')).toBeUndefined();
+      const labels = Array.from(dom().querySelectorAll('button')).map(b => b.textContent!.trim() || b.getAttribute('aria-label'));
+      expect(labels).toEqual(['Close', 'Print / Save PDF', 'Edit']);
     });
   });
 
@@ -133,73 +130,6 @@ describe('InvoiceViewerComponent', () => {
     });
   });
 
-  describe('the picture', () => {
-    it('Copy picture puts the picture on the clipboard and says it can be pasted into Telegram', async () => {
-      await open();
-      button('Copy picture').click();
-      await settle();
-      expect(png).toHaveBeenCalledTimes(1);
-      expect(copied).toHaveBeenCalledOnceWith(BLOB);
-      expect(savedAs).not.toHaveBeenCalled();
-      expect(message()).toBe('Picture copied. Paste it into Telegram.');
-    });
-
-    it('when the browser cannot copy (plain http, e.g. on a phone), the picture is saved as a file instead and it says so', async () => {
-      await open();
-      copied.and.returnValue(Promise.resolve(false));
-      button('Copy picture').click();
-      await settle();
-      expect(savedAs).toHaveBeenCalledOnceWith(BLOB);
-      expect(message()).toBe('Copying is not possible here, so the picture was saved as a file instead.');
-    });
-
-    it('Download picture saves the file', async () => {
-      await open();
-      button('Download picture').click();
-      await settle();
-      expect(savedAs).toHaveBeenCalledOnceWith(BLOB);
-      expect(copied).not.toHaveBeenCalled();
-      expect(message()).toBe('Picture saved.');
-    });
-
-    it('when the picture cannot be made it says so (in red) and nothing is saved', async () => {
-      await open();
-      png.and.returnValue(Promise.reject(new Error('boom')));
-      button('Download picture').click();
-      await settle();
-      expect(message()).toBe('The picture could not be made. Please try again.');
-      expect(dom().querySelector('[role="alert"]')).not.toBeNull();
-      expect(savedAs).not.toHaveBeenCalled();
-      expect(component.busy).toBeFalse();
-    });
-
-    it('the picture buttons are off while it is being made, and a second click does nothing', async () => {
-      await open();
-      let finish!: (blob: Blob) => void;
-      png.and.returnValue(new Promise<Blob>(resolve => { finish = resolve; }));
-      button('Download picture').click();
-      fixture.detectChanges();
-      expect(button('Copy picture').disabled).toBeTrue();
-      expect(button('Download picture').disabled).toBeTrue();
-      await component.downloadPicture();
-      expect(png).toHaveBeenCalledTimes(1);
-      finish(BLOB);
-      await settle();
-      expect(savedAs).toHaveBeenCalledTimes(1);
-      expect(button('Download picture').disabled).toBeFalse();
-    });
-
-    it('an old message goes away when the next action starts', async () => {
-      await open();
-      button('Download picture').click();
-      await settle();
-      expect(message()).toBe('Picture saved.');
-      button('Print / Save PDF').click();
-      await settle();
-      expect(message()).toBe('');
-    });
-  });
-
   describe('Edit and closing', () => {
     it('Edit tells the page to open the writing window', async () => {
       await open();
@@ -235,7 +165,7 @@ describe('InvoiceViewerComponent', () => {
       expect(closed).toBe(0);
     });
 
-    it('printing, the pictures and Edit still work', async () => {
+    it('printing and Edit still work', async () => {
       await open();
       fixture.componentRef.setInput('locked', true);
       fixture.detectChanges();
@@ -243,7 +173,6 @@ describe('InvoiceViewerComponent', () => {
       button('Edit').click();
       expect(printed).toHaveBeenCalled();
       expect(edited).toBe(1);
-      expect(button('Copy picture').disabled).toBeFalse();
     });
 
     it('closes again when it is unlocked', async () => {

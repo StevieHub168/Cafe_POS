@@ -34,22 +34,44 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
         [ngClass]="isDragging ? 'border-primary-400 bg-primary-50' : 'border-surface-border'"
         (dragover)="onDragOver($event)" (dragleave)="isDragging = false" (drop)="onDrop($event)">
 
-        <!-- The photos: click one to see it big (opens in a new tab) -->
-        <ul *ngIf="photos.length > 0 || isUploading" class="mb-3 flex flex-wrap gap-2" aria-label="Photos">
-          <li *ngFor="let photo of photos; let i = index; trackBy: trackByUrl" class="relative">
-            <a [href]="photo | imgSrc" target="_blank" rel="noopener" [attr.aria-label]="'Open photo ' + (i + 1)"
-              class="block h-16 w-16 overflow-hidden rounded-md border border-surface-border bg-gray-50">
-              <img [src]="photo | imgSrc" alt="" class="h-full w-full object-cover" />
-            </a>
-            <button type="button" (click)="remove(i)" [attr.aria-label]="'Remove photo ' + (i + 1)"
+        <!-- Preview of the chosen photo -->
+        <div class="relative flex h-48 items-center justify-center overflow-hidden rounded-lg bg-gray-50 ring-1 ring-inset ring-surface-border">
+          <img *ngIf="activePhoto; else noPreview" [src]="activePhoto | imgSrc" alt="Photo preview" class="h-full w-full object-contain" />
+          <ng-template #noPreview>
+            <div class="flex flex-col items-center gap-1">
+              <svg class="h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5z" />
+              </svg>
+              <span class="text-xs text-gray-400">No photo yet</span>
+            </div>
+          </ng-template>
+
+          <span *ngIf="activeIsLead" class="absolute left-2 top-2 rounded bg-primary-600 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">Laptop</span>
+
+          <div *ngIf="isUploading" aria-label="Uploading" class="absolute inset-0 flex items-center justify-center bg-white/70">
+            <span class="inline-flex items-center gap-2 text-sm font-medium text-gray-600">
+              <span class="h-4 w-4 animate-spin rounded-full border-2 border-primary-600 border-t-transparent"></span>
+              Uploading…<span *ngIf="pendingUploads > 1" class="font-normal text-gray-500">({{ pendingUploads }} left)</span>
+            </span>
+          </div>
+        </div>
+
+        <!-- All photos: click one to see it big. The laptop's own photo (if any) is first and cannot be removed here. -->
+        <ul *ngIf="all.length > 1" class="mt-3 flex flex-wrap gap-2" aria-label="All photos">
+          <li *ngFor="let photo of all; let i = index; trackBy: trackByIndex" class="relative">
+            <button type="button" (click)="select(i)" [attr.aria-label]="'Show photo ' + (i + 1)" [attr.aria-current]="i === shownIndex ? 'true' : null"
+              class="block h-14 w-14 overflow-hidden rounded-md border-2 bg-gray-50 transition"
+              [ngClass]="i === shownIndex ? 'border-primary-600' : 'border-transparent hover:border-gray-300'">
+              <img [src]="photo | imgSrc" [alt]="'Photo ' + (i + 1)" class="h-full w-full object-cover" />
+            </button>
+            <span *ngIf="lead && i === 0" class="pointer-events-none absolute inset-x-0 bottom-0 rounded-b bg-primary-600/90 text-center text-[9px] font-semibold uppercase text-white">Laptop</span>
+            <button *ngIf="!(lead && i === 0)" type="button" (click)="remove(i - leadCount)" [attr.aria-label]="'Remove photo ' + (i - leadCount + 1)"
               class="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-gray-700 text-[10px] leading-none text-white hover:bg-red-600">✕</button>
-          </li>
-          <li *ngIf="isUploading" class="flex h-16 w-16 items-center justify-center rounded-md border border-surface-border bg-gray-50" aria-label="Uploading">
-            <span class="h-5 w-5 animate-spin rounded-full border-2 border-primary-600 border-t-transparent"></span>
           </li>
         </ul>
 
-        <div class="flex flex-wrap items-center gap-2">
+        <!-- Buttons -->
+        <div class="mt-3 flex flex-wrap items-center gap-3">
           <!-- Phone / tablet only: opens the camera for one picture -->
           <label *ngIf="canTakePhoto"
             class="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 focus-within:ring-2 focus-within:ring-primary-100"
@@ -62,11 +84,12 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
           <label class="inline-flex items-center gap-1.5 rounded-lg border border-surface-border bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-within:ring-2 focus-within:ring-primary-100"
             [class.cursor-pointer]="canAdd" [class.cursor-not-allowed]="!canAdd" [class.opacity-50]="!canAdd">
             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
-            {{ photos.length > 0 ? 'Add photos' : 'Choose files' }}
+            {{ all.length > 0 ? 'Add photos' : 'Choose files' }}
             <input type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" class="sr-only" [disabled]="!canAdd" (change)="onFilesSelected($event)" />
           </label>
 
-          <span *ngIf="hint" class="text-[11px] text-gray-400">{{ hint }}</span>
+          <button *ngIf="activePhoto && !activeIsLead" type="button" (click)="removeActive()" class="text-xs font-medium text-red-600 hover:underline">Remove photo</button>
+          <span *ngIf="hint" class="ml-auto text-[11px] text-gray-400">{{ hint }}</span>
         </div>
 
         <p *ngIf="uploadError" role="alert" class="mt-2 text-xs text-red-600">{{ uploadError }}</p>
@@ -76,6 +99,8 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 })
 export class PhotoUploadComponent implements OnDestroy {
   @Input() photos: string[] = [];
+  /** A photo shown first, that is not one of `photos` and cannot be removed here (e.g. the laptop's own photo). */
+  @Input() lead: string | null = null;
   @Input() max = 4;
   @Input() label = 'Photos';
   @Input() hint = 'PNG, JPG, WEBP or GIF · up to 5 MB each';
@@ -105,7 +130,40 @@ export class PhotoUploadComponent implements OnDestroy {
     return typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches;
   }
 
-  trackByUrl = (_: number, url: string) => url;
+  // ---------- what is shown ----------
+
+  /** Which of the shown photos is big (0 = the first). */
+  activeIndex = 0;
+  trackByIndex = (index: number) => index;
+  private shown: { lead: string | null; photos: string[]; list: string[] } | null = null;
+
+  /** The lead photo (when there is one), then the photos. The same list is given back until one of them changes. */
+  get all(): string[] {
+    if (!this.shown || this.shown.lead !== this.lead || this.shown.photos !== this.photos) {
+      this.shown = { lead: this.lead, photos: this.photos, list: this.lead ? [this.lead, ...this.photos] : this.photos };
+    }
+    return this.shown.list;
+  }
+
+  get leadCount(): number {
+    return this.lead ? 1 : 0;
+  }
+
+  get shownIndex(): number {
+    return Math.max(0, Math.min(this.activeIndex, this.all.length - 1));
+  }
+
+  get activePhoto(): string {
+    return this.all[this.shownIndex] ?? '';
+  }
+
+  get activeIsLead(): boolean {
+    return !!this.lead && !!this.activePhoto && this.shownIndex === 0;
+  }
+
+  select(index: number): void {
+    this.activeIndex = index;
+  }
 
   // ---------- adding ----------
 
@@ -195,12 +253,18 @@ export class PhotoUploadComponent implements OnDestroy {
         }
         this.uploadedThisSession.add(url);
         this.setPhotos([...this.photos, url]);
+        this.activeIndex = this.all.length - 1;           // show the one just added
       },
       complete: () => (this.uploadError = [...new Set(problems)].join(' '))
     });
   }
 
   // ---------- removing / cleaning up ----------
+
+  /** The "Remove photo" button: the photo that is big (the lead photo cannot be removed). */
+  removeActive(): void {
+    if (!this.activeIsLead) this.remove(this.shownIndex - this.leadCount);
+  }
 
   remove(index: number): void {
     const url = this.photos[index];

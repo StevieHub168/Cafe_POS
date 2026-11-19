@@ -13,21 +13,15 @@
     <button type="button" (click)="errorMessage = ''" class="text-red-400 hover:text-red-600" aria-label="Dismiss">✕</button>
   </div>
 
-  <!-- Done (after a save it also offers to copy the message for that booking) -->
-  <div *ngIf="successMessage" role="status" class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-    <span class="inline-flex items-center gap-2">
-      <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-      {{ successMessage }}
-    </span>
-    <button *ngIf="savedBooking as saved" type="button" (click)="copyDetails(saved)"
-      class="rounded-md border border-green-300 bg-white px-2.5 py-1 text-xs font-medium text-green-800 hover:bg-green-100">Copy details</button>
+  <!-- Done -->
+  <div *ngIf="successMessage" role="status" class="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+    <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+    <span>{{ successMessage }}</span>
   </div>
 
   <!-- The numbers -->
-  <div class="grid grid-cols-1 gap-3 sm:grid-cols-3" data-summary>
+  <div class="grid grid-cols-1 gap-3 sm:grid-cols-2" data-summary>
     <div class="rounded-xl border border-surface-border bg-white px-4 py-3.5"><p class="text-xs text-gray-500">Waiting for pickup</p><p class="mt-0.5 text-2xl font-bold tabular-nums text-gray-900" data-waiting>{{ waitingForPickup }}</p></div>
-    <div class="rounded-xl border border-surface-border bg-white px-4 py-3.5"><p class="text-xs text-gray-500">Deposits we are holding</p><p class="mt-0.5 text-2xl font-bold tabular-nums text-gray-900" data-deposits>{{ money(depositsHeld) }}</p></div>
-    <div class="rounded-xl border border-amber-200 bg-white px-4 py-3.5"><p class="text-xs text-gray-500">Balance to collect at pickup</p><p class="mt-0.5 text-2xl font-bold tabular-nums text-amber-800" data-balance-total>{{ money(balanceToCollect) }}</p></div>
   </div>
 
   <!-- Status tabs + search -->
@@ -115,33 +109,17 @@
       </dl>
 
       <!-- Photos of the booking (e.g. the deposit receipt): click one to see it big -->
-      <ul *ngIf="(booking.images?.length ?? 0) > 0" class="flex flex-wrap gap-2 border-t border-gray-100 px-4 py-3" aria-label="Photos">
-        <li *ngFor="let photo of booking.images">
-          <a [href]="photo | imgSrc" target="_blank" rel="noopener" aria-label="Open photo"
-            class="block h-12 w-12 overflow-hidden rounded-md border border-surface-border bg-gray-50 hover:border-primary-400">
-            <img [src]="photo | imgSrc" alt="" class="h-full w-full object-cover" loading="lazy" />
-          </a>
-        </li>
-      </ul>
+      <app-photo-strip [photos]="booking.images"></app-photo-strip>
 
-      <!-- Actions: the main one on its own row, then the other four in an even row -->
+      <!-- Actions: the main one on its own row, then the other three in an even row -->
       <div class="mt-auto space-y-2 border-t border-gray-100 p-3">
-        <!-- Still booked: the customer is here. Picked up: the Sale it became. -->
+        <!-- Still booked: the customer is here. (A picked-up booking became a Sale and is not in this list any more.) -->
         <button *ngIf="booking.status === 'booked'" type="button" data-action="pickup" (click)="startPickup(booking)"
           class="flex h-11 w-full items-center justify-center rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white transition hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2">
           {{ pickupLabel(booking) }}
         </button>
-        <button *ngIf="booking.status === 'picked_up' && booking.sale_invoice_number" type="button" data-action="sale" (click)="openSale(booking)"
-          class="flex h-11 w-full items-center justify-center rounded-lg border border-green-200 bg-green-50 px-3 text-sm font-semibold text-green-800 transition hover:bg-green-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-600">
-          Became Sale {{ saleNumber(booking) }} →
-        </button>
 
-        <div class="grid grid-cols-4 gap-1">
-          <button type="button" (click)="copyDetails(booking)" title="Copy the booking details to send"
-            class="flex flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-[11px] font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
-            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg>
-            <span>Copy details</span>
-          </button>
+        <div class="grid grid-cols-3 gap-1">
           <button type="button" (click)="openInvoice(booking)" title="The paper for this booking: print it, save it as PDF or send it as a picture"
             class="flex flex-col items-center gap-1 rounded-lg px-1 py-1.5 text-[11px] font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
             <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
@@ -206,11 +184,6 @@
 <app-invoice-editor *ngIf="invoicing as work" type="booking" [invoice]="work.invoice" [prefill]="work.prefill" [products]="products"
   (saved)="onInvoiceSaved($event)" (closed)="invoicing = null"></app-invoice-editor>
 <app-invoice-viewer *ngIf="viewingInvoice as shown" [invoice]="shown" (closed)="viewingInvoice = null" (edit)="editViewedInvoice()"></app-invoice-viewer>
-
-<!-- ============ Send to customer: the message + the laptop photo + the invoice picture ============ -->
-<app-booking-share-dialog *ngIf="sendingDetails as sending"
-  [booking]="sending.booking" [invoice]="sending.invoice" [textCopied]="sending.textCopied"
-  (closed)="sendingDetails = null" (makeInvoice)="makeInvoiceToSend()"></app-booking-share-dialog>
 
 <!-- ============ Customer picked up: the booking becomes a Sale ============ -->
 <app-booking-pickup *ngIf="pickingUp as booking" [booking]="booking" (picked)="onPickedUp($event)" (closed)="closePickup()"></app-booking-pickup>

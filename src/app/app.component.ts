@@ -17,6 +17,7 @@ const ROUTE_TITLES: Record<string, string> = {
   '/dashboard': 'Dashboard',
   '/labels': 'Print labels',
   '/register': 'Create User',
+  '/users': 'Users',
 };
 
 @Component({

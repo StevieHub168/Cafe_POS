@@ -11,7 +11,6 @@ import { BookingService } from '../../services/booking.service';
 import { ProductService } from '../../services/product.service';
 import { InvoiceService } from '../../services/invoice.service';
 import { ShareService } from '../../services/share.service';
-import { BookingShareDialogComponent } from './booking-share-dialog.component';
 import { BookingPickupComponent } from './booking-pickup.component';
 import { Booking } from '../../models/booking.model';
 import { Invoice } from '../../models/invoice.model';
@@ -31,23 +30,10 @@ const EXAMPLE: Booking = {
   status: 'booked', product_image: '/uploads/air.png',
 };
 
-const SHOP_MESSAGE = [
-  'Booking Details',
-  '• Product: MacBook Air M5 | RAM 16GB | SSD 512GB',
-  '• Phone: 011968240',
-  '• Telegram: @Horth_Heng',
-  '• Full Price: $1,050',
-  '• Deposit: $500',
-  '• Remaining Balance: $550',
-  '• Booking Date: 08/11/2026',
-  '• Pickup Date: 12/11/2026 (Thursday)',
-  '• Status: Booked',
-].join('\n');
-
 const booking = (over: Partial<Booking> = {}): Booking => ({ ...EXAMPLE, ...over });
 const product = (over: Partial<Product> = {}): Product => ({
   id: 7, sku: 'MAC-901', name: 'MacBook Air M5', category_id: 1, brand: 'Apple', model: '', selling_price: 999,
-  extra_prices: [], stock_quantity: 1, min_stock_level: 0, is_archived: false, image_url: null, ...over,
+  extra_prices: [], stock_quantity: 1, min_stock_level: 0, is_archived: false, image_url: '/uploads/air.png', ...over,
 });
 
 describe('BookingsComponent', () => {
@@ -61,10 +47,10 @@ describe('BookingsComponent', () => {
   let productsApi: { [k: string]: jasmine.Spy };
   let invoicesApi: { [k: string]: jasmine.Spy };
   let sharingApi: { [k: string]: jasmine.Spy };
-  let copied: jasmine.Spy;
 
   /** `beforeStart` runs before the page is made (a request from the scan screen is already waiting when Bookings opens). */
-  async function create(list: Booking[] = [EXAMPLE], catalogue: Product[] = [], invoices: Invoice[] = [], beforeStart?: (scan: ScanActionService) => void): Promise<void> {
+  // (By default the shop has the laptop of the example, with its photo: a booking for it goes to Telegram with the picture.)
+  async function create(list: Booking[] = [EXAMPLE], catalogue: Product[] = [product()], invoices: Invoice[] = [], beforeStart?: (scan: ScanActionService) => void): Promise<void> {
     bookingsApi = {
       getBookings: jasmine.createSpy('getBookings').and.returnValue(of(list)),
       createBooking: jasmine.createSpy('createBooking').and.callFake((b: any) => of({ id: 99, remaining_balance: b.full_price - b.deposit, ...b })),
@@ -90,7 +76,7 @@ describe('BookingsComponent', () => {
       discardImage: jasmine.createSpy('discardImage').and.returnValue(of({ message: 'Photo removed' })),
     };
 
-    // The "Send to customer" window uses the browser's share menu, the network and the clipboard: pretend ones here.
+    // The invoice window uses the browser's share menu, the network and the clipboard: pretend ones here.
     sharingApi = {
       canShare: jasmine.createSpy('canShare').and.returnValue(true),
       share: jasmine.createSpy('share').and.resolveTo('shared'),
@@ -116,7 +102,6 @@ describe('BookingsComponent', () => {
 
     fixture = TestBed.createComponent(BookingsComponent);
     component = fixture.componentInstance;
-    copied = spyOn(component as any, 'copyText').and.returnValue(Promise.resolve(true));
     spyOn(component as any, 'now').and.returnValue(TODAY);
     fixture.detectChanges();
   }
@@ -186,7 +171,7 @@ describe('BookingsComponent', () => {
     });
 
     it('the balance still to pay is highlighted only while the booking is open', async () => {
-      await create([booking({ id: 1 }), booking({ id: 2, status: 'picked_up' })]);
+      await create([booking({ id: 1 }), booking({ id: 2, status: 'cancelled' })]);
       const balance = (card: HTMLElement) => Array.from(card.querySelectorAll('dd')).find(dd => dd.textContent!.includes('$550'))!;
       expect(balance(cards()[0]).className).toContain('text-amber-700');
       expect(balance(cards()[1]).className).not.toContain('text-amber-700');
@@ -222,15 +207,24 @@ describe('BookingsComponent', () => {
       const list = () => [
         booking({ id: 1, product_name: 'MacBook Air M5', status: 'booked' }),
         booking({ id: 2, product_name: 'Dell XPS 13', phone: '012 345 678', telegram: '@dell_fan', status: 'booked' }),
-        booking({ id: 3, product_name: 'Asus TUF A15', phone: '099 111 222', telegram: null, status: 'picked_up' }),
+        booking({ id: 3, product_name: 'Asus TUF A15', phone: '099 111 222', telegram: null, status: 'cancelled' }),
         booking({ id: 4, product_name: 'MSI Cyborg', status: 'cancelled' }),
       ];
       const tab = (label: string) => Array.from(dom().querySelectorAll('[role="group"] button')).find(b => b.textContent!.trim().startsWith(label)) as HTMLButtonElement;
 
-      it('has a tab per status with the number of bookings in it', async () => {
+      it('has a tab per status with the number of bookings in it (no "Picked up": that became a Sale)', async () => {
         await create(list());
-        expect(['All', 'Booked', 'Picked up', 'Cancelled'].map(l => tab(l).textContent!.replace(/\s+/g, '')))
-          .toEqual(['All4', 'Booked2', 'Pickedup1', 'Cancelled1']);
+        expect(['All', 'Booked', 'Cancelled'].map(l => tab(l).textContent!.replace(/\s+/g, '')))
+          .toEqual(['All4', 'Booked2', 'Cancelled2']);
+        expect(tab('Picked up')).toBeUndefined();
+      });
+
+      it('a picked-up booking (it became a Sale) is not in the list, and is not counted', async () => {
+        await create([...list(), booking({ id: 5, product_name: 'HP Victus 16', status: 'picked_up', sale_invoice_id: 77, sale_invoice_number: 36 })]);
+        expect(cards().map(c => c.querySelector('h3')!.textContent!.trim())).not.toContain('HP Victus 16');
+        expect(cards().length).toBe(4);
+        expect(tab('All').textContent!.replace(/\s+/g, '')).toBe('All4');
+        expect(text()).not.toContain('Became Sale');
       });
 
       it('a tab shows only that status, and is marked as the current one', async () => {
@@ -241,9 +235,9 @@ describe('BookingsComponent', () => {
         expect(cards().length).toBe(2);
         expect(tab('Booked').getAttribute('aria-pressed')).toBe('true');
         expect(tab('All').getAttribute('aria-pressed')).toBe('false');
-        tab('Picked up').click();
+        tab('Cancelled').click();
         fixture.detectChanges();
-        expect(cards().map(c => c.querySelector('h3')!.textContent!.trim())).toEqual(['Asus TUF A15']);
+        expect(cards().map(c => c.querySelector('h3')!.textContent!.trim())).toEqual(['Asus TUF A15', 'MSI Cyborg']);
         tab('All').click();
         fixture.detectChanges();
         expect(cards().length).toBe(4);
@@ -264,7 +258,7 @@ describe('BookingsComponent', () => {
 
       it('search and tab work together, and "No bookings found." appears when nothing matches', async () => {
         await create(list());
-        tab('Picked up').click();
+        tab('Cancelled').click();
         type('input[aria-label="Search bookings"]', 'xps');
         expect(cards().length).toBe(0);
         expect(text()).toContain('No bookings found.');
@@ -313,7 +307,7 @@ describe('BookingsComponent', () => {
 
       it('a picked-up or cancelled booking has no reminder, even if the date is in the past', async () => {
         TestBed.resetTestingModule();
-        expect(await hint('2026-11-01', 'picked_up')).toBeNull();
+        expect(await hint('2026-11-01', 'cancelled')).toBeNull();
         TestBed.resetTestingModule();
         expect(await hint('2026-11-01', 'cancelled')).toBeNull();
       });
@@ -324,7 +318,7 @@ describe('BookingsComponent', () => {
   describe('the New / Edit drawer (the form itself is tested in booking-form.component.spec.ts)', () => {
     const formComponent = () => fixture.debugElement.query(By.directive(BookingFormComponent)).componentInstance as BookingFormComponent;
     const fillValid = () => Object.assign(formComponent().form, {
-      product_name: 'MacBook Air M5 | RAM 16GB | SSD 512GB', phone: '011968240', telegram: '@Horth_Heng',
+      product_id: 7, product_name: 'MacBook Air M5 | RAM 16GB | SSD 512GB', phone: '011968240', telegram: '@Horth_Heng',
       full_price: 1050, deposit: 500, booking_date: '2026-11-08', pickup_date: '2026-11-12',
     });
     const openNew = async () => { buttonIn(dom(), 'New booking').click(); await settle(); };
@@ -377,16 +371,16 @@ describe('BookingsComponent', () => {
       expect(text()).toContain('Booking saved.');
     });
 
-    it('after a save the notice offers "Copy details" for that booking, and copies the message', async () => {
+    it('after a save the notice only says it is saved (nothing to copy)', async () => {
       await create();
       await openNew();
       fillValid();
       formComponent().submit();
       fixture.detectChanges();
-      buttonIn(dom().querySelector('[role="status"]') as HTMLElement, 'Copy details').click();
-      await settle();
-      expect(copied).toHaveBeenCalledOnceWith(SHOP_MESSAGE);
-      expect(text()).toContain('Booking details copied');
+      const notice = dom().querySelector('[role="status"]') as HTMLElement;
+      expect(notice.textContent).toContain('Booking saved.');
+      expect(notice.querySelector('button')).toBeNull();
+      expect(text()).not.toContain('Copy details');
     });
 
     it('saving changes to a booking says "Changes saved."', async () => {
@@ -661,193 +655,46 @@ describe('BookingsComponent', () => {
     });
 
     it('is only there for bookings still booked', async () => {
-      await create([booking({ id: 1 }), booking({ id: 2, status: 'picked_up' }), booking({ id: 3, status: 'cancelled' })]);
-      expect(cards().map(c => !!c.querySelector('[data-action="pickup"]'))).toEqual([true, false, false]);
-    });
-
-    it('a picked-up booking that became a Sale says "Became Sale 000036 →", and it opens that Sale\'s paper', async () => {
-      const sale: Invoice = {
-        id: 77, number: 36, type: 'sale', invoice_date: '2026-11-05', customer_name: null, phone: null, telegram: '@sok_dara', device: null, problem: null,
-        pickup_date: null, booking_id: null, warranty: '1_week', deposit: 1499, total: 1499, balance: 0, items: [{ name: 'Asus ROG Strix G16', qty: 1, unit_price: 1499 }],
-      };
-      await create([booking({ id: 3, status: 'picked_up', sale_invoice_id: 77, sale_invoice_number: 36 })], [], [sale]);
-      const link = cards()[0].querySelector('[data-action="sale"]') as HTMLButtonElement;
-      expect(link.textContent!.trim()).toBe('Became Sale 000036 →');
-      link.click();
-      fixture.detectChanges();
-      expect(fixture.debugElement.query(By.directive(InvoiceViewerComponent)).componentInstance.invoice.number).toBe(36);
-    });
-
-    it('a picked-up booking with no Sale (picked up the old way) has no such button', async () => {
-      await create([booking({ status: 'picked_up' })]);
-      expect(cards()[0].querySelector('[data-action="sale"]')).toBeNull();
+      await create([booking({ id: 1 }), booking({ id: 2, status: 'cancelled' })]);
+      expect(cards().map(c => !!c.querySelector('[data-action="pickup"]'))).toEqual([true, false]);
     });
 
     describe('the layout of the buttons', () => {
       const labels = (root: ParentNode) => Array.from(root.querySelectorAll('button')).map(b => b.textContent!.trim());
 
-      it('the main button is on its own full-width row, above the other four', async () => {
+      it('the main button is on its own full-width row, above the other three', async () => {
         await create([EXAMPLE]);
         const main = cards()[0].querySelector('[data-action="pickup"]') as HTMLButtonElement;
         expect(main.classList).toContain('w-full');
-        const row = cards()[0].querySelector('.grid-cols-4') as HTMLElement;
+        const row = cards()[0].querySelector('.grid-cols-3') as HTMLElement;
         expect(row).not.toBeNull();
         expect(main.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(row.contains(main)).toBeFalse();
       });
 
-      it('the other four sit in one even row: Copy details, Invoice, Edit, Cancel (each with an icon and its name under it)', async () => {
+      it('the other three sit in one even row: Invoice, Edit, Cancel (each with an icon and its name under it)', async () => {
         await create([EXAMPLE]);
-        const row = cards()[0].querySelector('.grid-cols-4') as HTMLElement;
-        expect(labels(row)).toEqual(['Copy details', 'Invoice', 'Edit', 'Cancel']);
+        const row = cards()[0].querySelector('.grid-cols-3') as HTMLElement;
+        expect(labels(row)).toEqual(['Invoice', 'Edit', 'Cancel']);
         for (const button of Array.from(row.querySelectorAll('button'))) {
           expect(button.querySelector('svg')).withContext(button.textContent ?? '').not.toBeNull();
           expect(button.querySelector('svg')!.getAttribute('aria-hidden')).toBe('true');
         }
       });
 
-      it('a booking that is not "booked" has only the row of four, with Delete instead of Cancel (no empty gap where the main button was)', async () => {
-        await create([booking({ id: 2, status: 'picked_up' }), booking({ id: 3, status: 'cancelled' })]);
-        expect(labels(cards()[0])).toEqual(['Copy details', 'Invoice', 'Edit', 'Delete']);
-        expect(labels(cards()[1])).toEqual(['Copy details', 'Invoice', 'Edit', 'Delete']);
+      it('a booking that is not "booked" has only the row of three, with Delete instead of Cancel (no empty gap where the main button was)', async () => {
+        await create([booking({ id: 2, status: 'cancelled' }), booking({ id: 3, status: 'cancelled' })]);
+        expect(labels(cards()[0])).toEqual(['Invoice', 'Edit', 'Delete']);
+        expect(labels(cards()[1])).toEqual(['Invoice', 'Edit', 'Delete']);
+      });
+
+      it('there is no "Copy details" button (the booking message is sent to Telegram by the app)', async () => {
+        await create([EXAMPLE]);
+        expect(text()).not.toContain('Copy details');
+        expect(dom().querySelector('app-booking-share-dialog')).toBeNull();
       });
     });
 
-    it('"Copy details" copies the message word for word as the shop writes it', async () => {
-      await create([EXAMPLE]);
-      buttonIn(cards()[0], 'Copy details').click();
-      await settle();
-      expect(copied).toHaveBeenCalledOnceWith(SHOP_MESSAGE);
-      expect(text()).toContain('Booking details copied. Paste them into Telegram.');
-    });
-
-    it('says when copying did not work', async () => {
-      await create([EXAMPLE]);
-      copied.and.returnValue(Promise.resolve(false));
-      buttonIn(cards()[0], 'Copy details').click();
-      await settle();
-      expect(text()).toContain('Could not copy.');
-      expect(text()).not.toContain('Booking details copied');
-    });
-
-    // The message, the photo of the laptop and the invoice picture go out together from the "Send to customer" window.
-    describe('"Copy details" and the "Send to customer" window', () => {
-      const MADE: Invoice = {
-        id: 40, number: 42, type: 'booking', invoice_date: '2026-11-08', customer_name: null, phone: '011968240', telegram: '@Horth_Heng',
-        device: null, problem: null, pickup_date: '2026-11-12', booking_id: 1, warranty: '1_month', deposit: 500, total: 1050, balance: 550,
-        items: [{ name: 'MacBook Air M5 | RAM 16GB | SSD 512GB', qty: 1, unit_price: 1050 }],
-      };
-      const sendWindow = () => dom().querySelector('app-booking-share-dialog [role="dialog"]') as HTMLElement | null;
-      const shareDialog = () => fixture.debugElement.query(By.directive(BookingShareDialogComponent))?.componentInstance as BookingShareDialogComponent | undefined;
-      const copyDetails = async (index = 0) => { buttonIn(cards()[index], 'Copy details').click(); await settle(); };
-
-      it('copies the message first, like always, and opens the window when there is a laptop photo to send', async () => {
-        await create([EXAMPLE]);                 // has a product photo
-        await copyDetails();
-        expect(copied).toHaveBeenCalledOnceWith(SHOP_MESSAGE);
-        expect(text()).toContain('Booking details copied. Paste them into Telegram.');
-        expect(sendWindow()).not.toBeNull();
-        expect(sendWindow()!.textContent).toContain('Send to customer');
-        expect(shareDialog()!.booking).toBe(EXAMPLE);
-        expect(shareDialog()!.textCopied).toBeTrue();
-      });
-
-      it('opens it when the booking has an invoice, and hands that invoice over', async () => {
-        await create([booking({ product_image: null })], [], [MADE]);
-        await copyDetails();
-        expect(sendWindow()).not.toBeNull();
-        expect(shareDialog()!.invoice).toBe(MADE);
-      });
-
-      it('does NOT open it when there is nothing else to send (no photo and no invoice): just the copy, as before', async () => {
-        await create([booking({ product_image: null })]);
-        await copyDetails();
-        expect(copied).toHaveBeenCalledOnceWith(SHOP_MESSAGE);
-        expect(text()).toContain('Booking details copied.');
-        expect(sendWindow()).toBeNull();
-      });
-
-      it('opens it even when the copy failed (Share does not need the clipboard), and says the message was not copied', async () => {
-        await create([EXAMPLE]);
-        copied.and.returnValue(Promise.resolve(false));
-        await copyDetails();
-        expect(text()).toContain('Could not copy.');
-        expect(sendWindow()).not.toBeNull();
-        expect(shareDialog()!.textCopied).toBeFalse();
-      });
-
-      it('"Copy details" in the notice after saving a booking does the same', async () => {
-        await create([]);
-        component.onSaved({ created: true, booking: EXAMPLE });
-        fixture.detectChanges();
-        buttonIn(dom().querySelector('[role="status"]') as HTMLElement, 'Copy details').click();
-        await settle();
-        expect(sendWindow()).not.toBeNull();
-        expect(shareDialog()!.booking).toBe(EXAMPLE);
-      });
-
-      it('the window is for THAT booking (a second card, a second window)', async () => {
-        await create([EXAMPLE, booking({ id: 2, product_name: 'Dell XPS 13', product_image: '/uploads/dell.png' })]);
-        await copyDetails(1);
-        expect(sendWindow()!.textContent).toContain('Dell XPS 13');
-        expect(sharingApi['fetchImage']).toHaveBeenCalledOnceWith(`${apiOrigin}/uploads/dell.png`, 'laptop');
-      });
-
-      it('Esc closes only the window (the page behind stays as it was)', async () => {
-        await create([EXAMPLE]);
-        await copyDetails();
-        key('Escape');
-        expect(sendWindow()).toBeNull();
-        expect(text()).toContain('Booking details copied.');
-        expect(cards().length).toBe(1);
-      });
-
-      it('the ✕ and the dark background close it', async () => {
-        await create([EXAMPLE]);
-        await copyDetails();
-        (sendWindow()!.querySelector('button[aria-label="Close"]') as HTMLButtonElement).click();
-        fixture.detectChanges();
-        expect(sendWindow()).toBeNull();
-        await copyDetails();
-        (dom().querySelector('.share-backdrop') as HTMLElement).click();
-        fixture.detectChanges();
-        expect(sendWindow()).toBeNull();
-      });
-
-      it('Share sends the message, the photo and the invoice picture together', async () => {
-        await create([EXAMPLE], [], [MADE]);
-        await copyDetails();
-        await settle();
-        buttonIn(sendWindow()!, 'Share 3 items').click();
-        await settle();
-        expect(sharingApi['share']).toHaveBeenCalledTimes(1);
-        const [files, message] = sharingApi['share'].calls.mostRecent().args;
-        expect((files as File[]).map(f => f.name)).toEqual(['laptop.jpg', 'invoice-000042.png']);
-        expect(message).toBe(SHOP_MESSAGE);
-      });
-
-      it('"Make invoice" (a booking with no invoice yet) closes the window and opens the invoice form for it', async () => {
-        await create([EXAMPLE]);
-        await copyDetails();
-        buttonIn(sendWindow()!, 'Make invoice').click();
-        await settle();
-        expect(sendWindow()).toBeNull();
-        expect(dom().querySelector('app-invoice-editor [role="dialog"]')).not.toBeNull();
-        expect((fixture.debugElement.query(By.directive(InvoiceFormComponent)).componentInstance as InvoiceFormComponent).form.booking_id).toBe(1);
-      });
-
-      it('Esc while the window is open does not also close something behind it', async () => {
-        await create([EXAMPLE]);
-        buttonIn(cards()[0], 'Edit').click();
-        await settle();
-        expect(drawer()).not.toBeNull();
-        component.sendingDetails = { booking: EXAMPLE, invoice: null, textCopied: true };
-        fixture.detectChanges();
-        key('Escape');
-        expect(sendWindow()).toBeNull();
-        expect(drawer()).not.toBeNull();         // the edit drawer is still open: one Esc, one window
-      });
-    });
   });
 
   // ---------------------------------------------------------------------------------------------
@@ -1292,7 +1139,7 @@ describe('BookingsComponent', () => {
     const makeBooking = async (status: 'booked' | 'cancelled' = 'booked') => {
       buttonIn(dom(), 'New booking').click();
       await settle();
-      Object.assign(formComponent().form, { product_name: 'MacBook Air M5', phone: '011968240', full_price: 1050, deposit: 500, booking_date: '2026-11-08', pickup_date: '2026-11-12', status });
+      Object.assign(formComponent().form, { product_id: 7, product_name: 'MacBook Air M5', phone: '011968240', full_price: 1050, deposit: 500, booking_date: '2026-11-08', pickup_date: '2026-11-12', status });
       formComponent().submit();
       await settle();
     };
@@ -1358,17 +1205,17 @@ describe('BookingsComponent', () => {
       booking({ id: 4, status: 'cancelled', deposit: 100, remaining_balance: 950 }),
     ];
 
-    it('count only the bookings still waiting: how many, the deposits held, the balance to collect', async () => {
+    it('count only the bookings still waiting (no money numbers)', async () => {
       await create(LIST);
       expect(dom().querySelector('[data-waiting]')!.textContent!.trim()).toBe('2');
-      expect(dom().querySelector('[data-deposits]')!.textContent!.trim()).toBe('$800');
-      expect(dom().querySelector('[data-balance-total]')!.textContent!.trim()).toBe('$1,449');
+      expect(dom().querySelectorAll('[data-summary] > div').length).toBe(1);
+      expect(text()).not.toContain('Deposits we are holding');
+      expect(text()).not.toContain('Balance to collect');
     });
 
-    it('are zero when nothing is booked', async () => {
+    it('is zero when nothing is booked', async () => {
       await create([]);
       expect(dom().querySelector('[data-waiting]')!.textContent!.trim()).toBe('0');
-      expect(dom().querySelector('[data-deposits]')!.textContent!.trim()).toBe('$0');
     });
 
     it('say in one line what the page is for', async () => {
@@ -1410,7 +1257,7 @@ describe('BookingsComponent', () => {
       await open(booking({ deposit: 0 }));
       expect(dialog()!.textContent).not.toContain('deposit of');
       TestBed.resetTestingModule();
-      await open(booking({ status: 'picked_up' }));
+      await open(booking({ status: 'cancelled' }));
       expect(dialog()!.textContent).not.toContain('deposit of');
     });
 

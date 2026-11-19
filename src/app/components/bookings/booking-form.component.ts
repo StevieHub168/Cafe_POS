@@ -6,7 +6,7 @@ import { BookingService } from '../../services/booking.service';
 import { BOOKING_STATUSES, Booking, BookingInput, BookingStatus } from '../../models/booking.model';
 import { Product } from '../../models/product.model';
 import { PhotoUploadComponent } from '../ui/photo-upload.component';
-import { ImgSrcPipe } from '../../pipes/img-src.pipe';
+import { ProductSearchComponent } from '../ui/product-search.component';
 import { formatDate, todayIso, weekdayName } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 
@@ -56,7 +56,7 @@ const MAX_PHOTOS = 4;
 @Component({
   selector: 'app-booking-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, PhotoUploadComponent, ImgSrcPipe],
+  imports: [CommonModule, FormsModule, PhotoUploadComponent, ProductSearchComponent],
   templateUrl: './booking-form.component.html',
   styles: [`:host { display: flex; flex-direction: column; flex: 1 1 0%; min-height: 0; }`]
 })
@@ -87,7 +87,6 @@ export class BookingFormComponent implements OnInit, OnChanges {
 
   /** Once the price was typed or chosen by hand, picking a product no longer overwrites it. */
   private priceTouched = false;
-  productSuggestions: Product[] = [];
   /** The prices of the chosen catalogue product (kept in a field, not worked out on every refresh). */
   priceOptions: PriceOption[] = [];
 
@@ -153,55 +152,39 @@ export class BookingFormComponent implements OnInit, OnChanges {
   }
 
   /**
-   * What saving will do to the laptop of the shop ('' = nothing): a booking takes one off the shelf.
-   * Counted stock goes down by one; a single laptop is set aside and leaves the Menu until it is picked up or cancelled.
+   * The photo of the laptop: the one picked, or the product with exactly the name that was typed (the API does the same).
+   * It goes to Telegram first; the Photos box below is for more.
    */
-  get holdNote(): string {
-    const linked = this.linkedProduct;
-    if (!linked || this.form.status !== 'booked') return '';
-    const own = this.booking?.stock_held && this.booking.product_id === linked.id;
-    if (linked.track_stock) {
-      if (own) return 'One laptop is taken from stock for this booking.';
-      return linked.stock_quantity > 0 ? `One will be taken from stock (${linked.stock_quantity} now).` : 'None left in stock, so nothing is taken.';
+  get laptopPhoto(): string | null {
+    const laptop = this.linkedProduct ?? this.productNamedLikeTheBox();
+    return laptop ? (laptop.image_url || (laptop.images ?? []).find(Boolean) || null) : null;
+  }
+
+  private productNamedLikeTheBox(): Product | null {
+    const key = (text: string) => text.trim().replace(/\s+/g, ' ').toLowerCase();
+    const typed = [key(this.form.product_name), key(this.form.product_name.split('|')[0])].filter(Boolean);
+    for (const name of typed) {
+      const found = this.products.find(p => key(p.name) === name && (p.image_url || (p.images ?? []).some(Boolean)));
+      if (found) return found;
     }
-    if (own) return 'This laptop is set aside for this booking.';
-    if (linked.hold_status === 'booked') return 'This laptop is already booked.';
-    if (linked.hold_status === 'repair') return 'This laptop is in repair.';
-    return 'This laptop will be set aside (off the Menu) until it is picked up or cancelled.';
+    return null;
   }
 
-  /** The laptop cannot be booked now: someone else has it set aside. */
-  get holdBlocked(): boolean {
+  /**
+   * Said under the Product box only when the laptop cannot be booked now ('' = fine): a single laptop that someone else
+   * has set aside (booked or in repair). Its own booking does not count, and counted stock can always be booked.
+   */
+  get holdBlockedNote(): string {
     const linked = this.linkedProduct;
-    if (!linked || linked.track_stock || this.form.status !== 'booked') return false;
-    return !!linked.hold_status && !(this.booking?.stock_held && this.booking.product_id === linked.id);
+    if (!linked || linked.track_stock || this.form.status !== 'booked' || !linked.hold_status) return '';
+    if (this.booking?.stock_held && this.booking.product_id === linked.id) return '';
+    return linked.hold_status === 'repair' ? 'This laptop is in repair.' : 'This laptop is already booked.';
   }
 
-  onProductInput(): void {
-    const q = this.form.product_name.trim().toLowerCase();
-    if (!q) {
-      this.unlinkProduct();
-      this.productSuggestions = [];
-      return;
-    }
-    const words = q.split(/\s+/);
-    this.productSuggestions = this.products
-      .filter(p => !p.is_archived && !p.hold_status)     // a laptop that is already booked or in repair cannot be booked again
-      .filter(p => {
-        const text = `${p.name} ${p.brand ?? ''} ${p.model ?? ''} ${p.sku}`.toLowerCase();
-        return words.every(w => text.includes(w));
-      })
-      .slice(0, 6);
-  }
-
-  hideSuggestions(): void {
-    this.productSuggestions = [];
-  }
-
-  pickFirstSuggestion(event: Event): void {
-    if (this.productSuggestions.length === 0) return;      // nothing to pick: Enter works as normal
-    event.preventDefault();
-    this.pickProduct(this.productSuggestions[0]);
+  /** The Product box was typed in: emptying it also unlinks the laptop. */
+  onProductText(text: string): void {
+    this.form.product_name = text;
+    if (!text.trim()) this.unlinkProduct();
   }
 
   /** Fills the box with the product and, unless a price was already set by hand, its price. */
@@ -209,7 +192,6 @@ export class BookingFormComponent implements OnInit, OnChanges {
     this.form.product_id = product.id ?? null;
     this.form.product_name = product.name;
     if (!this.priceTouched) this.form.full_price = Number(product.selling_price);
-    this.productSuggestions = [];
     this.refreshPriceOptions();
   }
 

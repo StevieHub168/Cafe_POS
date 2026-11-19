@@ -1,3 +1,4 @@
+import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AskDialogComponent } from './ask-dialog.component';
 
@@ -89,5 +90,49 @@ describe('AskDialogComponent', () => {
     const alert = dialog().querySelector('[role="alert"]') as HTMLElement;
     expect(alert.textContent).toContain('Could not update the laptop.');
     expect(alert.className).toContain('text-red-600');
+  });
+
+  describe('with a box to fill in inside it', () => {
+    @Component({
+      standalone: true,
+      imports: [AskDialogComponent],
+      template: `<app-ask-dialog title="Reset password" message="For Sok Dara." [focus]="focus"><input id="inner" class="mt-3" /></app-ask-dialog>`,
+    })
+    class HostComponent { focus: 'yes' | 'no' | 'content' = 'content'; }
+
+    const create = (focus: 'yes' | 'no' | 'content') => {
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({ imports: [HostComponent] });
+      const host = TestBed.createComponent(HostComponent);
+      host.componentInstance.focus = focus;
+      document.body.appendChild(host.nativeElement);       // focus only works for something that is on the page
+      host.detectChanges();
+      return host;
+    };
+
+    it('shows what is put inside it, under the question and above the buttons', () => {
+      const host = create('content');
+      const box = host.nativeElement.querySelector('[role="alertdialog"]') as HTMLElement;
+      const inner = box.querySelector('#inner')!;
+      const buttons = box.querySelector('button')!;
+      expect(inner).not.toBeNull();
+      expect(box.querySelector('h2')!.compareDocumentPosition(inner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(inner.compareDocumentPosition(buttons) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      host.nativeElement.remove();
+    });
+
+    it('focus="content" starts in that box', () => {
+      const host = create('content');
+      expect(document.activeElement).toBe(host.nativeElement.querySelector('#inner'));
+      host.nativeElement.remove();
+    });
+
+    it('the other focus choices still start on a button', () => {
+      for (const [focus, label] of [['yes', 'Yes'], ['no', 'No']] as const) {
+        const host = create(focus);
+        expect((document.activeElement as HTMLElement).textContent!.trim()).toBe(label);
+        host.nativeElement.remove();
+      }
+    });
   });
 });

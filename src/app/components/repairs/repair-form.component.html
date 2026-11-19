@@ -44,12 +44,10 @@
         <div>
           <ng-container *ngIf="form.source === 'shop'; else typed">
             <label for="r-laptop" class="mb-1 block text-xs font-medium text-gray-700">Laptop <span class="text-red-500">*</span></label>
-            <select id="r-laptop" name="product_id" [(ngModel)]="form.product_id" (ngModelChange)="pickLaptop()"
-              class="w-full rounded-lg border border-surface-border bg-white px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100">
-              <option [ngValue]="null">Pick a laptop...</option>
-              <option *ngFor="let laptop of shopLaptops" [ngValue]="laptop.id">{{ laptopLabel(laptop) }}</option>
-            </select>
-            <p *ngIf="holdNote" class="mt-1 text-xs text-gray-500" data-hold-note>{{ holdNote }}</p>
+            <app-product-search inputId="r-laptop" name="laptop" [text]="form.device" [products]="shopLaptops" [maxlength]="maxDevice"
+              placeholder="Type to find your laptop" (textChange)="onLaptopText($event)" (picked)="pickLaptop($event)"></app-product-search>
+            <!-- Only when this laptop is already in repair -->
+            <p *ngIf="holdBlockedNote" class="mt-1 text-xs text-red-600" data-hold-note>{{ holdBlockedNote }}</p>
             <p *ngIf="shopLaptops.length === 0" class="mt-1 text-[11px] text-gray-500">There are no laptops in Products yet. Choose "A customer's laptop" and type the name.</p>
           </ng-container>
           <ng-template #typed>
@@ -86,8 +84,12 @@
           <p class="mt-1 text-right text-[11px] tabular-nums text-gray-500">{{ form.problem.length }} / {{ maxProblem }}</p>
         </div>
 
-        <!-- Dates and cost -->
-        <div class="grid grid-cols-3 gap-3">
+        <!-- Photos of what is wrong: take one with the phone, or choose files -->
+        <app-photo-upload [(photos)]="form.images" [max]="maxPhotos" label="Photos (e.g. the damage)"
+          (uploadingChange)="uploading = $event"></app-photo-upload>
+
+        <!-- Dates and cost (on a phone the cost has its own row, so the dates are wide enough) -->
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div>
             <label for="r-received" class="mb-1 block text-xs font-medium text-gray-700">Received <span class="text-red-500">*</span></label>
             <input id="r-received" type="date" name="received_date" [(ngModel)]="form.received_date"
@@ -98,7 +100,7 @@
             <input id="r-backon" type="date" name="back_on" [(ngModel)]="form.back_on"
               class="w-full rounded-lg border border-surface-border px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-100" />
           </div>
-          <div>
+          <div class="col-span-2 sm:col-span-1">
             <label for="r-cost" class="mb-1 block text-xs font-medium text-gray-700">Cost <span class="font-normal text-gray-500">(optional)</span></label>
             <div class="relative">
               <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">$</span>
@@ -132,9 +134,9 @@
       <div class="flex flex-shrink-0 gap-3 border-t border-surface-border bg-white px-5 py-4">
         <button type="button" (click)="close()" [disabled]="isSubmitting"
           class="flex-1 rounded-xl border border-surface-border bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:opacity-50">Cancel</button>
-        <button type="submit" [disabled]="isSubmitting"
+        <button type="submit" [disabled]="isSubmitting || uploading"
           class="flex-[2] rounded-xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white hover:bg-primary-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:opacity-60">
-          {{ isSubmitting ? 'Saving...' : (repair ? 'Save changes' : 'Save repair') }}
+          {{ isSubmitting ? 'Saving...' : (uploading ? 'Uploading...' : (repair ? 'Save changes' : 'Save repair')) }}
         </button>
       </div>
     </form>

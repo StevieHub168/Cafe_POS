@@ -1,7 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { Subject, of, throwError } from 'rxjs';
 import { RepairFormComponent, RepairSaved } from './repair-form.component';
 import { RepairService } from '../../services/repair.service';
+import { ProductService } from '../../services/product.service';
+import { PhotoUploadComponent } from '../ui/photo-upload.component';
 import { Repair } from '../../models/repair.model';
 import { Invoice } from '../../models/invoice.model';
 import { Product } from '../../models/product.model';
@@ -31,6 +34,7 @@ describe('RepairFormComponent', () => {
   let fixture: ComponentFixture<RepairFormComponent>;
   let component: RepairFormComponent;
   let api: { [k: string]: jasmine.Spy };
+  let productsApi: { [k: string]: jasmine.Spy };
   let saved: RepairSaved[];
   let closed: number;
 
@@ -41,9 +45,14 @@ describe('RepairFormComponent', () => {
       createRepair: jasmine.createSpy('createRepair').and.callFake((r: any) => of({ id: 9, fixed_date: null, picked_up_date: null, ...r })),
       updateRepair: jasmine.createSpy('updateRepair').and.callFake((id: number, r: any) => of({ id, fixed_date: null, picked_up_date: null, ...r })),
     };
+    let uploads = 0;
+    productsApi = {
+      uploadImage: jasmine.createSpy('uploadImage').and.callFake(() => of({ url: `/uploads/damage-${++uploads}.png` })),
+      discardImage: jasmine.createSpy('discardImage').and.returnValue(of({ message: 'Photo removed' })),
+    };
     await TestBed.configureTestingModule({
       imports: [RepairFormComponent],
-      providers: [{ provide: RepairService, useValue: api }],
+      providers: [{ provide: RepairService, useValue: api }, { provide: ProductService, useValue: productsApi }],
     }).compileComponents();
     fixture = TestBed.createComponent(RepairFormComponent);
     component = fixture.componentInstance;
@@ -74,6 +83,14 @@ describe('RepairFormComponent', () => {
     const box = input(selector);
     box.value = value;
     box.dispatchEvent(new Event('input'));
+    await settle();
+  };
+  const suggestions = () => Array.from(dom().querySelectorAll('ul[aria-label="Your products that match"] li')) as HTMLElement[];
+  /** Picks a laptop of the shop the way a person does: choose "A laptop of my shop", type a bit of the name, click the match. */
+  const pickShop = async (name: string) => {
+    if (radio('A laptop of my shop').getAttribute('aria-checked') !== 'true') { radio('A laptop of my shop').click(); await settle(); }
+    await type('#r-laptop', name);
+    suggestions()[0].querySelector('button')!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
     await settle();
   };
   const filled = async () => { await type('#r-device', 'Lenovo ThinkPad T14'); await type('#r-problem', 'Does not turn on'); };
@@ -151,25 +168,39 @@ describe('RepairFormComponent', () => {
       expect(dom().querySelector('#r-laptop')).toBeNull();
     });
 
-    it('"A laptop of my shop" swaps the box for the shop\'s laptops, A-Z, without the sold (hidden) ones', async () => {
+    it('"A laptop of my shop" swaps the box for one that finds the shop\'s laptops as you type (no drop-down list), never the sold ones', async () => {
       await open();
       radio('A laptop of my shop').click();
       await settle();
-      const options = Array.from(dom().querySelectorAll('#r-laptop option')).map(o => o.textContent!.trim());
-      expect(options).toEqual(['Pick a laptop...', 'Dell XPS 13', 'MacBook Air 13" M1']);
+      expect(dom().querySelector('select')).toBeNull();
+      expect(input('#r-laptop').type).toBe('text');
       expect(input('#r-device')).toBeNull();
+      expect(suggestions().length).toBe(0);                                        // nothing is listed before typing
+      await type('#r-laptop', 'dell');
+      expect(suggestions().map(li => li.querySelector('.truncate')!.textContent!.trim())).toEqual(['Dell XPS 13']);
+      await type('#r-laptop', 'laptop');
+      expect(suggestions().length).toBe(0);                                        // "Old laptop" is sold (hidden)
     });
 
     it('picking a laptop makes its name the device and remembers which laptop it is', async () => {
       await open();
-      radio('A laptop of my shop').click();
-      await settle();
-      const select = dom().querySelector('#r-laptop') as HTMLSelectElement;
-      select.value = select.options[2].value;
-      select.dispatchEvent(new Event('change'));
-      await settle();
+      await pickShop('macbook');
       expect(component.form.product_id).toBe(2);
       expect(component.form.device).toBe('MacBook Air 13" M1');
+      expect(input('#r-laptop').value).toBe('MacBook Air 13" M1');
+      expect(suggestions().length).toBe(0);
+    });
+
+    it('typing again after a laptop was picked forgets it, and Save asks to pick one from the list', async () => {
+      await open();
+      await pickShop('macbook');
+      await type('#r-laptop', 'MacBook Air 13" M1 (new)');
+      expect(component.form.product_id).toBeNull();
+      await type('#r-problem', 'Does not turn on');
+      component.submit();
+      await settle();
+      expect(component.formError).toBe('Pick the laptop from your products.');
+      expect(api['createRepair']).not.toHaveBeenCalled();
     });
 
     it('with no laptops in Products it says so, and points to the other choice', async () => {
@@ -188,80 +219,86 @@ describe('RepairFormComponent', () => {
       expect(input('#r-device').value).toBe('MacBook Air 13" M1');
     });
 
-    it('going back to the shop\'s laptops with one already picked keeps it', async () => {
+    it('switching to the customer\'s laptop and back keeps the name, and picks the shop laptop again when the name is exactly one of them', async () => {
       await open({ prefill: { product_id: 2, device: 'MacBook Air 13" M1' } });
       radio("A customer's laptop").click();
+      await settle();
+      expect(input('#r-device').value).toBe('MacBook Air 13" M1');
       radio('A laptop of my shop').click();
       await settle();
-      expect(component.form.product_id).toBeNull();                 // it was forgotten when the choice changed
-      expect(component.form.device).toBe('');                       // nothing is picked until the person picks
+      expect(input('#r-laptop').value).toBe('MacBook Air 13" M1');
+      expect(component.form.product_id).toBe(2);
+    });
+
+    it('a name typed for a customer\'s laptop is still there in the other choice (not picked, so Save asks to pick one)', async () => {
+      await open();
+      await type('#r-device', 'Lenovo ThinkPad T14');
+      radio('A laptop of my shop').click();
+      await settle();
+      expect(input('#r-laptop').value).toBe('Lenovo ThinkPad T14');
+      expect(component.form.product_id).toBeNull();
+      radio("A customer's laptop").click();
+      await settle();
+      expect(input('#r-device').value).toBe('Lenovo ThinkPad T14');
+    });
+
+    it('a name typed in the shop box (not picked yet) is still there when switching to the customer\'s laptop', async () => {
+      await open();
+      radio('A laptop of my shop').click();
+      await settle();
+      await type('#r-laptop', 'hp vic');
+      radio("A customer's laptop").click();
+      await settle();
+      expect(input('#r-device').value).toBe('hp vic');
     });
 
     it('a laptop started from the Menu (prefill with a product) is already picked', async () => {
       await open({ prefill: { product_id: 2, device: 'MacBook Air 13" M1' } });
       expect(radio('A laptop of my shop').getAttribute('aria-checked')).toBe('true');
       expect(component.form.product_id).toBe(2);
-      expect((dom().querySelector('#r-laptop') as HTMLSelectElement).selectedOptions[0].textContent!.trim()).toBe('MacBook Air 13" M1');
+      expect(input('#r-laptop').value).toBe('MacBook Air 13" M1');
     });
   });
 
-  describe('a repair takes the laptop off the shelf: the line under the list says how', () => {
+  describe('under the laptop box: a line only when the laptop is already in repair', () => {
     const note = () => dom().querySelector('[data-hold-note]') as HTMLElement | null;
-    const pickShop = async (id: number) => {
-      radio('A laptop of my shop').click();
-      await settle();
-      const select = dom().querySelector('#r-laptop') as HTMLSelectElement;
-      select.value = Array.from(select.options).find(o => o.text.trim().startsWith(component.shopLaptops.find(p => p.id === id)!.name))!.value;
-      select.dispatchEvent(new Event('change'));
-      await settle();
-    };
 
-    it('no line until a laptop is picked, and none for a customer\'s laptop', async () => {
-      await open({ products: [laptop(1, 'Dell XPS 13', { track_stock: false })] });
+    it('says nothing for a free single laptop, counted stock, or a customer\'s laptop', async () => {
+      await open({ products: [laptop(1, 'Dell XPS 13', { track_stock: false }), laptop(2, 'HP 15', { track_stock: true, stock_quantity: 0 })] });
       expect(note()).toBeNull();
-      radio('A laptop of my shop').click();
-      await settle();
+      await pickShop('dell');
+      expect(note()).toBeNull();
+      await pickShop('hp');
       expect(note()).toBeNull();
     });
 
-    it('a free single laptop: set aside until it is fixed', async () => {
-      await open({ products: [laptop(1, 'Dell XPS 13', { track_stock: false })] });
-      await pickShop(1);
-      expect(note()!.textContent).toContain('This laptop will be set aside (off the Menu) until it is fixed.');
-    });
-
-    it('counted stock: one will be taken, and how many there are; none left = nothing taken', async () => {
-      await open({ products: [laptop(1, 'Dell XPS 13', { track_stock: true, stock_quantity: 3 }), laptop(2, 'HP 15', { track_stock: true, stock_quantity: 0 })] });
-      await pickShop(1);
-      expect(note()!.textContent).toContain('One will be taken from stock (3 now).');
-      await pickShop(2);
-      expect(note()!.textContent).toContain('None left in stock, so nothing is taken.');
-    });
-
-    it('a laptop that is booked or in repair is still in the list, with its state in the name, and the line explains', async () => {
+    it('a laptop that is booked or in repair is found too, with a small tag, and only "in repair" is said in red', async () => {
       await open({ products: [laptop(1, 'Dell XPS 13', { track_stock: false, hold_status: 'booked' }), laptop(2, 'HP 15', { track_stock: false, hold_status: 'repair' })] });
       radio('A laptop of my shop').click();
       await settle();
-      const options = Array.from(dom().querySelectorAll('#r-laptop option')).map(o => o.textContent!.trim());
-      expect(options).toEqual(['Pick a laptop...', 'Dell XPS 13 (booked)', 'HP 15 (in repair)']);
-      await pickShop(1);
-      expect(note()!.textContent).toContain('This laptop is booked: it stays set aside for the booking.');
-      await pickShop(2);
+      await type('#r-laptop', 'dell');
+      expect(suggestions()[0].textContent).toContain('Booked');
+      await pickShop('dell');
+      expect(note()).toBeNull();                                   // a booked laptop may be repaired
+      await type('#r-laptop', 'hp');
+      expect(suggestions()[0].textContent).toContain('In repair');
+      await pickShop('hp');
       expect(note()!.textContent).toContain('This laptop is already in repair.');
+      expect(note()!.classList).toContain('text-red-600');
     });
 
-    it('changing the repair that holds the laptop: it is its own laptop', async () => {
+    it('changing the repair that holds the laptop: it is its own laptop, so nothing is said', async () => {
       await open({
         repair: { ...EXISTING, product_id: 1, status: 'received', fixed_date: null, stock_held: true, product_track_stock: false },
         products: [laptop(1, 'Dell XPS 13', { track_stock: false, hold_status: 'repair' })],
       });
-      expect(note()!.textContent).toContain('This laptop is set aside while it is in repair.');
+      expect(note()).toBeNull();
     });
 
-    it('a repair that is already fixed does not take the laptop again, so no line', async () => {
+    it('a repair that is already fixed says nothing', async () => {
       await open({
         repair: { ...EXISTING, product_id: 1, status: 'fixed' },
-        products: [laptop(1, 'Dell XPS 13', { track_stock: false })],
+        products: [laptop(1, 'Dell XPS 13', { track_stock: false, hold_status: 'repair' })],
       });
       expect(note()).toBeNull();
     });
@@ -382,7 +419,7 @@ describe('RepairFormComponent', () => {
       component.submit();
       expect(api['createRepair']).toHaveBeenCalledOnceWith({
         product_id: null, device: 'Lenovo ThinkPad T14', customer_name: 'Rotha Kim', phone: '017 222 333', telegram: null,
-        problem: 'Does not turn on', received_date: TODAY, back_on: '2026-11-13', cost: null, status: 'received', sale_invoice_id: null,
+        problem: 'Does not turn on', received_date: TODAY, back_on: '2026-11-13', cost: null, status: 'received', sale_invoice_id: null, images: [],
       });
     });
 
@@ -534,6 +571,92 @@ describe('RepairFormComponent', () => {
     });
   });
 
+  // ---------------------------------------------------------------------------------------------
+  describe('photos of what is wrong', () => {
+    const picture = (name = 'damage.png') => new File([new Uint8Array(100)], name, { type: 'image/png' });
+    const photoBox = () => fixture.debugElement.query(By.directive(PhotoUploadComponent)).componentInstance as PhotoUploadComponent;
+    const addPhotos = (...files: File[]) => {
+      photoBox().onFilesSelected({ target: { files, value: 'x' } } as unknown as Event);
+      fixture.detectChanges();
+    };
+    const fillValid = async () => { await type('#r-device', 'Lenovo ThinkPad T14'); await type('#r-problem', 'Cracked screen'); };
+
+    it('has the same photo box as the booking form, up to 4, under "What is wrong?"', async () => {
+      await open();
+      expect(photoBox().max).toBe(4);
+      expect(text()).toContain('Photos (e.g. the damage)');
+      const problem = dom().querySelector('#r-problem')!;
+      const box = dom().querySelector('app-photo-upload')!;
+      expect(problem.compareDocumentPosition(box) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('a picture added in the box goes into the repair that is saved', async () => {
+      await open();
+      await fillValid();
+      addPhotos(picture());
+      component.submit();
+      expect(api['createRepair'].calls.mostRecent().args[0].images).toEqual(['/uploads/damage-1.png']);
+    });
+
+    it('without a picture, an empty list is sent', async () => {
+      await open();
+      await fillValid();
+      component.submit();
+      expect(api['createRepair'].calls.mostRecent().args[0].images).toEqual([]);
+    });
+
+    it('the photos of an existing repair are shown, and removing one is saved', async () => {
+      await open({ repair: { ...EXISTING, images: ['/uploads/1.png', '/uploads/2.png'] } });
+      expect(dom().querySelectorAll('ul[aria-label="All photos"] li').length).toBe(2);
+      (dom().querySelector('button[aria-label="Remove photo 1"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      component.submit();
+      expect(api['updateRepair'].calls.mostRecent().args[1].images).toEqual(['/uploads/2.png']);
+      expect(productsApi['discardImage']).not.toHaveBeenCalled();           // the API cleans up the saved file when it saves
+    });
+
+    it('Save waits while a picture is on its way (the button says so), then works', async () => {
+      await open();
+      await fillValid();
+      const pending = new Subject<{ url: string }>();
+      productsApi['uploadImage'].and.returnValue(pending);
+      addPhotos(picture());
+      expect(component.uploading).toBeTrue();
+      expect(text()).toContain('Uploading...');
+      expect(button('Uploading...')!.disabled).toBeTrue();
+      component.submit();
+      expect(api['createRepair']).not.toHaveBeenCalled();
+      pending.next({ url: '/uploads/late.png' });
+      pending.complete();
+      fixture.detectChanges();
+      expect(component.uploading).toBeFalse();
+      component.submit();
+      expect(api['createRepair'].calls.mostRecent().args[0].images).toEqual(['/uploads/late.png']);
+    });
+
+    it('after saving, the photos are kept (nothing is discarded when the form goes away)', async () => {
+      await open();
+      await fillValid();
+      addPhotos(picture());
+      component.submit();
+      await settle();
+      fixture.destroy();
+      expect(productsApi['discardImage']).not.toHaveBeenCalled();
+    });
+
+    it('closing without saving deletes the pictures uploaded in this form', async () => {
+      await open();
+      addPhotos(picture('a.png'), picture('b.png'));
+      fixture.destroy();
+      expect(productsApi['discardImage'].calls.allArgs().map(a => a[0]).sort()).toEqual(['/uploads/damage-1.png', '/uploads/damage-2.png']);
+    });
+
+    it('a repair can have up to 4 photos', async () => {
+      await open({ repair: { ...EXISTING, images: ['/uploads/1.png', '/uploads/2.png', '/uploads/3.png', '/uploads/4.png'] } });
+      expect(photoBox().canAdd).toBeFalse();
+    });
+  });
+
   describe('changing a repair', () => {
     it('saves with updateRepair on that repair and keeps its status', async () => {
       await open({ repair: EXISTING });
@@ -560,7 +683,7 @@ describe('RepairFormComponent', () => {
     it('a repair of one of the shop\'s laptops shows that laptop picked', async () => {
       await open({ repair: { ...EXISTING, product_id: 2, device: 'MacBook Air 13" M1' } });
       expect(component.form.source).toBe('shop');
-      expect((dom().querySelector('#r-laptop') as HTMLSelectElement).selectedOptions[0].textContent!.trim()).toBe('MacBook Air 13" M1');
+      expect(input('#r-laptop').value).toBe('MacBook Air 13" M1');
     });
   });
 });

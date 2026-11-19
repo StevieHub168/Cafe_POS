@@ -23,13 +23,9 @@
   <div *ngIf="successMessage" role="status" class="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
     <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
     <span>{{ successMessage }}</span>
-    <!-- After a booking: send the message, or go and see it -->
-    <ng-container *ngIf="savedBooking as booked">
-      <button type="button" (click)="copyBookingDetails(booked)"
-        class="ml-1 rounded-md border border-green-300 bg-white px-2.5 py-1 text-xs font-medium text-green-800 hover:bg-green-100">Copy details</button>
-      <button type="button" (click)="viewBookings()"
-        class="rounded-md px-2.5 py-1 text-xs font-medium text-green-800 underline hover:bg-green-100">View bookings</button>
-    </ng-container>
+    <!-- After a booking: go and see it -->
+    <button *ngIf="savedBooking" type="button" (click)="viewBookings()"
+      class="ml-1 rounded-md px-2.5 py-1 text-xs font-medium text-green-800 underline hover:bg-green-100">View bookings</button>
   </div>
 
   <div class="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
@@ -273,7 +269,7 @@
 
             <div class="flex flex-1 flex-col p-2.5">
               <h3 class="line-clamp-2 text-sm font-semibold leading-tight text-gray-800" [title]="product.name">{{ product.name }}</h3>
-              <p class="mt-0.5 truncate text-[11px] text-gray-400">{{ product.brand || '—' }} {{ product.model || '' }}</p>
+              <!-- <p class="mt-0.5 truncate text-[11px] text-gray-400">{{ product.brand || '—' }} {{ product.model || '' }}</p> -->
               <p class="mt-0.5 truncate font-mono text-[10px] text-gray-400">{{ product.sku }}</p>
               <p *ngIf="product.description" class="mt-1.5 line-clamp-2 whitespace-pre-line text-[11px] leading-snug text-gray-600">{{ product.description }}</p>
               <!-- Stock: the same words and colours as the table's badge, as one short coloured line -->
@@ -304,7 +300,7 @@
 </div>
 
 <!-- ============ Add / Edit Product drawer ============ -->
-<div *ngIf="showProductModal" class="drawer-backdrop fixed inset-0 z-50 flex justify-end bg-gray-900/50" (click)="closeProductModal()">
+<div *ngIf="showProductModal" class="drawer-backdrop fixed inset-0 z-50 flex justify-end bg-gray-900/50" (mousedown)="onBackdropPress($event)" (click)="onBackdropClick()">
   <div class="drawer-panel flex h-full w-full max-w-lg flex-col bg-white shadow-2xl" role="dialog" aria-modal="true"
        [attr.aria-label]="editingProductId === null ? 'Add product' : 'Edit product'" (click)="$event.stopPropagation()">
 
@@ -336,7 +332,7 @@
       </div>
     </div>
 
-    <form (ngSubmit)="submitProduct()" (keydown.meta.enter)="submitProduct()" (keydown.control.enter)="submitProduct()" class="flex min-h-0 flex-1 flex-col">
+    <form (ngSubmit)="submitProduct()" (keydown.enter)="onFormEnter($event)" (keydown.meta.enter)="submitProduct()" (keydown.control.enter)="submitProduct()" class="flex min-h-0 flex-1 flex-col">
       <div class="flex-1 space-y-5 overflow-y-auto p-5">
 
         <!-- A laptop that was sold: it can be put back on the Menu -->

@@ -414,8 +414,8 @@ describe('MenuComponent', () => {
   });
   // ---------------------------------------------------------------------------------------------
   describe('Sell / Book / Repair from a laptop', () => {
-    const SINGLE = () => product(1, [], { name: 'Laptop 1', selling_price: 100, track_stock: 0, stock_quantity: 1 });
-    const COUNTED = () => product(2, [], { name: 'MacBook Air 13" M1', selling_price: 799, track_stock: 1, stock_quantity: 6, min_stock_level: 2, brand: 'Apple' });
+    const SINGLE = () => product(1, ['https://a.example/1.jpg'], { name: 'Laptop 1', selling_price: 100, track_stock: 0, stock_quantity: 1 });
+    const COUNTED = () => product(2, ['https://a.example/2.jpg'], { name: 'MacBook Air 13" M1', selling_price: 799, track_stock: 1, stock_quantity: 6, min_stock_level: 2, brand: 'Apple' });
     const GONE = () => product(3, [], { name: 'Dell XPS 13', selling_price: 1199, track_stock: 1, stock_quantity: 0, min_stock_level: 1 });
 
     const settle = async () => { for (let i = 0; i < 4; i++) await Promise.resolve(); fixture.detectChanges(); };
@@ -745,82 +745,44 @@ describe('MenuComponent', () => {
         expect(productsApi['updateProduct']).not.toHaveBeenCalled();
       });
 
-      it('after saving: the paper opens with a review under it ("Mark this laptop as sold?"), not a pop-up', async () => {
-        await create([COUNTED()]);
+      it('after saving: the laptop is sold at once, with NO question. The paper opens to print or copy', async () => {
+        await create([SINGLE()]);
         await sell();
         save();
         await settle();
         expect(editor()).toBeNull();
         expect(viewer()).not.toBeNull();
         expect(question()).toBeNull();
-        expect(review()).not.toBeNull();
-        expect(reviewText()).toContain('Mark this laptop as sold?');
-        expect(reviewText()).toContain('MacBook Air 13" M1');
-        expect(word('Mark as sold', review()!)).toBeTruthy();
-        expect(word('Not now', review()!)).toBeTruthy();
-        expect(notice()).toBe('Invoice 000044 saved.');
+        expect(review()).toBeNull();
+        expect(productsApi['updateProduct']).toHaveBeenCalledOnceWith(1, { is_archived: true });
+        expect(dom().textContent).not.toContain('Mark this laptop as sold?');
+        expect(dom().textContent).not.toContain('Not now');
       });
 
-      it('shows the laptop photo next to its name (a grey box when it has none)', async () => {
-        await create([product(2, THREE, { name: 'With photo', selling_price: 10, track_stock: 0 })]);
+      it('says it is sold, and the Menu is read again (a single laptop is hidden from it)', async () => {
+        await create([SINGLE()]);
         await sell();
+        const loadsBefore = productsApi['getAllProducts'].calls.count();
         save();
         await settle();
-        expect(review()!.querySelector('img')).not.toBeNull();
-        TestBed.resetTestingModule();
-        await create([product(2, [], { name: 'No photo', selling_price: 10, track_stock: 0, image_url: null })]);
-        await sell();
-        save();
-        await settle();
-        expect(review()).not.toBeNull();
-        expect(review()!.querySelector('img')).toBeNull();
+        expect(notice()).toBe('“Laptop 1” marked as sold.');
+        expect(productsApi['getAllProducts'].calls.count()).toBe(loadsBefore + 1);
       });
 
-      it('NOTHING changes until "Mark as sold" is pressed', async () => {
-        await create([COUNTED()]);
-        await sell();
-        save();
-        await settle();
-        expect(productsApi['updateProduct']).not.toHaveBeenCalled();
-      });
-
-      it('the focus is on "Not now" (Mark as sold changes the laptop)', async () => {
-        await create([COUNTED()]);
-        await sell();
-        save();
-        await settle();
-        expect(document.activeElement).toBe(word('Not now', review()!));
-      });
-
-      it('while it waits, the paper cannot be closed by mistake (✕, Esc, dark background), but it can be printed and changed', async () => {
+      it('the paper can be closed like any paper (✕ and Esc work), and printed and changed', async () => {
         await create([COUNTED()]);
         await sell();
         save();
         await settle();
         const close = viewer()!.querySelector('button[aria-label="Close"]') as HTMLButtonElement;
-        expect(close.disabled).toBeTrue();
-        esc();
-        (dom().querySelector('.viewer-backdrop') as HTMLElement).click();
-        fixture.detectChanges();
-        expect(viewer()).not.toBeNull();
-        expect(review()).not.toBeNull();
+        expect(close.disabled).toBeFalse();
         expect(word('Print / Save PDF', viewer()!).disabled).toBeFalse();
         expect(word('Edit', viewer()!)).toBeTruthy();
-      });
-
-      it('after the choice the paper closes like any paper again', async () => {
-        await create([COUNTED()]);
-        await sell();
-        save();
-        await settle();
-        word('Not now', review()!).click();
-        fixture.detectChanges();
-        expect((viewer()!.querySelector('button[aria-label="Close"]') as HTMLButtonElement).disabled).toBeFalse();
         esc();
         expect(viewer()).toBeNull();
       });
 
-      it('a repair invoice (made from the repair form) never shows the review', async () => {
+      it('a repair invoice (made from the repair form) never marks anything as sold', async () => {
         await create([COUNTED()]);
         await openLaptop();
         word('Repair', detailPanel()!).click();
@@ -834,71 +796,41 @@ describe('MenuComponent', () => {
         await settle();
         expect(viewer()).not.toBeNull();
         expect(review()).toBeNull();
-      });
-
-      describe('a single laptop', () => {
-        it('says it will be hidden from the Menu, and Mark as sold hides it (is_archived) and reloads the Menu', async () => {
-          await create([SINGLE()]);
-          await sell();
-          save();
-          await settle();
-          expect(reviewText()).toContain('It is hidden from the Menu. You can put it back from Products.');
-          const loadsBefore = productsApi['getAllProducts'].calls.count();
-          word('Mark as sold', review()!).click();
-          await settle();
-          expect(productsApi['updateProduct']).toHaveBeenCalledOnceWith(1, { is_archived: true });
-          expect(review()).toBeNull();
-          expect(productsApi['getAllProducts'].calls.count()).toBe(loadsBefore + 1);
-          expect(notice()).toBe('“Laptop 1” marked as sold.');
-        });
+        expect(productsApi['updateProduct']).not.toHaveBeenCalled();
       });
 
       describe('a laptop with counted stock', () => {
-        it('says how the stock changes (6 -> 5), and Mark as sold lowers it by one', async () => {
+        it('goes down by one (6 -> 5)', async () => {
           await create([COUNTED()]);
           await sell();
           save();
-          await settle();
-          expect(reviewText()).toContain('Stock goes from 6 to 5.');
-          word('Mark as sold', review()!).click();
           await settle();
           expect(productsApi['updateProduct']).toHaveBeenCalledOnceWith(2, { stock_quantity: 5 });
           expect(notice()).toBe('“MacBook Air 13" M1” marked as sold.');
         });
 
-        it('uses the quantity written on the invoice line of this laptop, and says it', async () => {
+        it('uses the quantity written on the invoice line of this laptop (2 pieces: 6 -> 4)', async () => {
           await create([COUNTED()]);
           await sell();
           save(f => { f.form.items[0].qty = 2; });
           await settle();
-          expect(reviewText()).toContain('2 sold on this invoice. Stock goes from 6 to 4.');
-          word('Mark as sold', review()!).click();
-          await settle();
           expect(productsApi['updateProduct']).toHaveBeenCalledOnceWith(2, { stock_quantity: 4 });
         });
 
-        it('does not talk about a quantity when one was sold', async () => {
-          await create([COUNTED()]);
-          await sell();
-          save();
-          await settle();
-          expect(reviewText()).not.toContain('sold on this invoice');
-        });
-
-        it('finds the line however the capitals are written', async () => {
+        it('finds the line however the capitals are written (3 pieces: 6 -> 3)', async () => {
           await create([COUNTED()]);
           await sell();
           save(f => { f.form.items[0].name = 'macbook AIR 13" m1'; f.form.items[0].qty = 3; });
           await settle();
-          expect(reviewText()).toContain('Stock goes from 6 to 3.');
+          expect(productsApi['updateProduct']).toHaveBeenCalledOnceWith(2, { stock_quantity: 3 });
         });
 
-        it('if the line was renamed it counts one piece', async () => {
+        it('if the line was renamed it counts one piece (6 -> 5)', async () => {
           await create([COUNTED()]);
           await sell();
           save(f => { f.form.items[0].name = 'Something else'; f.form.items[0].qty = 3; });
           await settle();
-          expect(reviewText()).toContain('Stock goes from 6 to 5.');
+          expect(productsApi['updateProduct']).toHaveBeenCalledOnceWith(2, { stock_quantity: 5 });
         });
 
         it('the stock never goes below 0', async () => {
@@ -906,60 +838,68 @@ describe('MenuComponent', () => {
           await sell();
           save(f => { f.form.items[0].qty = 5; });
           await settle();
-          expect(reviewText()).toContain('Stock goes from 1 to 0.');
-          word('Mark as sold', review()!).click();
-          await settle();
           expect(productsApi['updateProduct']).toHaveBeenCalledOnceWith(2, { stock_quantity: 0 });
         });
       });
 
-      describe('the choice', () => {
-        it('"Not now" changes nothing, says so, and the paper stays to print', async () => {
-          await create([COUNTED()]);
-          await sell();
-          save();
-          await settle();
-          word('Not now', review()!).click();
-          fixture.detectChanges();
-          expect(review()).toBeNull();
-          expect(productsApi['updateProduct']).not.toHaveBeenCalled();
-          expect(viewer()).not.toBeNull();
-          expect(notice()).toBe('“MacBook Air 13" M1” was not marked as sold.');
-        });
-
-        it('when it fails the review stays, says why, and Mark as sold can be tried again', async () => {
+      describe('when the laptop could not be marked as sold (no internet, ...)', () => {
+        const saveWhileFailing = async (error: unknown = { error: { error: 'Product not found' } }) => {
           await create([SINGLE()]);
           await sell();
+          productsApi['updateProduct'].and.returnValue(throwError(() => error));
           save();
           await settle();
-          productsApi['updateProduct'].and.returnValue(throwError(() => ({ error: { error: 'Product not found' } })));
-          word('Mark as sold', review()!).click();
-          await settle();
+        };
+
+        it('the invoice is saved and its paper opens, and ONLY NOW the question shows, with the reason', async () => {
+          await saveWhileFailing();
+          expect(invoicesApi['createInvoice']).toHaveBeenCalledTimes(1);
+          expect(viewer()).not.toBeNull();
           expect(review()).not.toBeNull();
+          expect(reviewText()).toContain('Mark this laptop as sold?');
+          expect(reviewText()).toContain('Laptop 1');
           expect(reviewText()).toContain('Product not found');
+          expect(word('Mark as sold', review()!)).toBeTruthy();
+          expect(word('Not now', review()!)).toBeTruthy();
+        });
+
+        it('a failure with no reason says so in plain words', async () => {
+          await saveWhileFailing(new Error('offline'));
+          expect(reviewText()).toContain('Could not update the laptop. Please try again.');
+        });
+
+        it('nothing is sent to Telegram, and the paper cannot be closed by mistake while the question waits', async () => {
+          await saveWhileFailing();
+          expect(telegramApi.send).not.toHaveBeenCalled();
+          expect((viewer()!.querySelector('button[aria-label="Close"]') as HTMLButtonElement).disabled).toBeTrue();
+          esc();
+          expect(viewer()).not.toBeNull();
+        });
+
+        it('"Mark as sold" tries again: it works this time, the question goes away and the sale is sent to Telegram', async () => {
+          await saveWhileFailing();
           expect(word('Mark as sold', review()!).disabled).toBeFalse();
           productsApi['updateProduct'].and.returnValue(of({}));
           word('Mark as sold', review()!).click();
           await settle();
           expect(review()).toBeNull();
+          expect(notice()).toBe('“Laptop 1” marked as sold.');
+          expect(telegramApi.send).toHaveBeenCalledTimes(1);
+          expect((viewer()!.querySelector('button[aria-label="Close"]') as HTMLButtonElement).disabled).toBeFalse();
         });
 
-        it('a failure with no reason says so in plain words', async () => {
-          await create([SINGLE()]);
-          await sell();
-          save();
-          await settle();
-          productsApi['updateProduct'].and.returnValue(throwError(() => new Error('offline')));
-          word('Mark as sold', review()!).click();
-          await settle();
-          expect(reviewText()).toContain('Could not update the laptop. Please try again.');
+        it('"Not now" changes nothing, says so, sends nothing, and the paper stays to print', async () => {
+          await saveWhileFailing();
+          word('Not now', review()!).click();
+          fixture.detectChanges();
+          expect(review()).toBeNull();
+          expect(viewer()).not.toBeNull();
+          expect(notice()).toBe('“Laptop 1” was not marked as sold.');
+          expect(telegramApi.send).not.toHaveBeenCalled();
         });
 
-        it('while it is being done the buttons are off and a second click does nothing', async () => {
-          await create([SINGLE()]);
-          await sell();
-          save();
-          await settle();
+        it('while a try is being done the buttons are off and a second click does nothing', async () => {
+          await saveWhileFailing();
           const pending = new Subject<any>();
           productsApi['updateProduct'].and.returnValue(pending);
           word('Mark as sold', review()!).click();
@@ -968,7 +908,7 @@ describe('MenuComponent', () => {
           expect(word('Not now', review()!).disabled).toBeTrue();
           component.markSold();
           component.skipSold();
-          expect(productsApi['updateProduct']).toHaveBeenCalledTimes(1);
+          expect(productsApi['updateProduct']).toHaveBeenCalledTimes(2);       // the first try, and this one
           expect(review()).not.toBeNull();
           pending.next({});
           pending.complete();
@@ -977,16 +917,31 @@ describe('MenuComponent', () => {
         });
       });
 
+      it('while the laptop is being marked, a second click on anything does not sell it twice', async () => {
+        await create([SINGLE()]);
+        await sell();
+        const pending = new Subject<any>();
+        productsApi['updateProduct'].and.returnValue(pending);
+        save();
+        await settle();
+        component.markSold();                                    // (there is no question to answer: nothing happens)
+        expect(productsApi['updateProduct']).toHaveBeenCalledTimes(1);
+        expect(telegramApi.send).not.toHaveBeenCalled();          // not sold yet: nothing is sent yet
+        pending.next({});
+        pending.complete();
+        await settle();
+        expect(telegramApi.send).toHaveBeenCalledTimes(1);
+        expect(notice()).toBe('“Laptop 1” marked as sold.');
+      });
+
       describe('changing the invoice from its paper (Edit)', () => {
         const edit = async () => { word('Edit', viewer()!).click(); await settle(); };
 
-        it('after "Not now" it does not ask again', async () => {
+        it('after the sale it does not sell again, and does not send again', async () => {
           await create([COUNTED()]);
           await sell();
           save();
           await settle();
-          word('Not now', review()!).click();
-          fixture.detectChanges();
           await edit();
           expect(editor()!.getAttribute('aria-label')).toBe('Edit invoice 000044');
           invoiceForm().form.customer_name = 'Sok Dara';
@@ -995,66 +950,68 @@ describe('MenuComponent', () => {
           expect(invoicesApi['updateInvoice']).toHaveBeenCalledTimes(1);
           expect(review()).toBeNull();
           expect(notice()).toBe('Invoice 000044 changed.');
+          expect(productsApi['updateProduct']).toHaveBeenCalledTimes(1);
+          expect(telegramApi.send).toHaveBeenCalledTimes(1);
         });
 
-        it('while the review waits, Edit opens the editor; saving brings back the paper AND the review', async () => {
-          await create([COUNTED()]);
-          await sell();
-          save();
-          await settle();
-          await edit();
-          expect(viewer()).toBeNull();
-          invoiceForm().form.customer_name = 'Sok Dara';
-          invoiceForm().submit();
-          await settle();
-          expect(viewer()).not.toBeNull();
-          expect(review()).not.toBeNull();
-          expect(productsApi['updateProduct']).not.toHaveBeenCalled();
-        });
+        describe('while the question waits (marking failed)', () => {
+          const failedSale = async () => {
+            await create([COUNTED()]);
+            await sell();
+            productsApi['updateProduct'].and.returnValue(throwError(() => ({ error: { error: 'down' } })));
+            save();
+            await settle();
+          };
 
-        it('the review follows a changed quantity (1 -> 2 pieces: stock 6 -> 4)', async () => {
-          await create([COUNTED()]);
-          await sell();
-          save();
-          await settle();
-          expect(reviewText()).toContain('Stock goes from 6 to 5.');
-          await edit();
-          invoiceForm().form.items[0].qty = 2;
-          invoiceForm().submit();
-          await settle();
-          expect(reviewText()).toContain('2 sold on this invoice. Stock goes from 6 to 4.');
-          word('Mark as sold', review()!).click();
-          await settle();
-          expect(productsApi['updateProduct']).toHaveBeenCalledOnceWith(2, { stock_quantity: 4 });
-        });
+          it('Edit opens the editor; saving brings back the paper AND the question', async () => {
+            await failedSale();
+            await edit();
+            expect(viewer()).toBeNull();
+            invoiceForm().form.customer_name = 'Sok Dara';
+            invoiceForm().submit();
+            await settle();
+            expect(viewer()).not.toBeNull();
+            expect(review()).not.toBeNull();
+          });
 
-        it('cancelling the change brings back the same paper and its review', async () => {
-          await create([COUNTED()]);
-          await sell();
-          save();
-          await settle();
-          await edit();
-          word('Cancel', editor()!).click();
-          await settle();
-          expect(editor()).toBeNull();
-          expect(viewer()).not.toBeNull();
-          expect(review()).not.toBeNull();
-          expect(viewer()!.textContent).toContain('Invoice 000044');
-          expect(detailPanel()).toBeNull();
+          it('the question follows a changed quantity (1 -> 2 pieces: stock 6 -> 4)', async () => {
+            await failedSale();
+            expect(reviewText()).toContain('Stock goes from 6 to 5.');
+            await edit();
+            invoiceForm().form.items[0].qty = 2;
+            invoiceForm().submit();
+            await settle();
+            expect(reviewText()).toContain('2 sold on this invoice. Stock goes from 6 to 4.');
+            productsApi['updateProduct'].and.returnValue(of({}));
+            word('Mark as sold', review()!).click();
+            await settle();
+            expect(productsApi['updateProduct'].calls.mostRecent().args).toEqual([2, { stock_quantity: 4 }]);
+          });
+
+          it('cancelling the change brings back the same paper and its question', async () => {
+            await failedSale();
+            await edit();
+            word('Cancel', editor()!).click();
+            await settle();
+            expect(editor()).toBeNull();
+            expect(viewer()).not.toBeNull();
+            expect(review()).not.toBeNull();
+            expect(viewer()!.textContent).toContain('Invoice 000044');
+            expect(detailPanel()).toBeNull();
+          });
         });
       });
 
-      it('each sale reviews ITS laptop (a second sale after the first)', async () => {
+      it('each sale sells ITS laptop (a second sale after the first)', async () => {
         await create([SINGLE(), COUNTED()]);
         await sell(0);
         save();
         await settle();
-        word('Not now', review()!).click();
         esc();
         await sell(1);
         save();
         await settle();
-        expect(reviewText()).toContain('MacBook Air 13" M1');
+        expect(productsApi['updateProduct'].calls.allArgs()).toEqual([[1, { is_archived: true }], [2, { stock_quantity: 5 }]]);
       });
     });
 
@@ -1224,23 +1181,13 @@ describe('MenuComponent', () => {
         expect(telegramApi.send).toHaveBeenCalledOnceWith('repair', 7);
       });
 
-      it('"Mark as sold" sends the sale with its paper (so the picture is made), once', async () => {
+      it('a saved sale is sent as soon as the laptop is sold: the sale with its paper (so the picture is made), once, with no question', async () => {
         await create([SINGLE()]);
         await sellAndSave();
-        expect(telegramApi.send).not.toHaveBeenCalled();             // saving the invoice alone is not "sold" yet
-        word('Mark as sold', review()!).click();
-        await settle();
         expect(telegramApi.send).toHaveBeenCalledTimes(1);
         const [kind, id, invoice] = telegramApi.send.calls.mostRecent().args;
         expect([kind, id, invoice.number, invoice.type]).toEqual(['sold', 99, 44, 'sale']);
-      });
-
-      it('"Not now" sends nothing: the laptop was not sold', async () => {
-        await create([SINGLE()]);
-        await sellAndSave();
-        word('Not now', review()!).click();
-        await settle();
-        expect(telegramApi.send).not.toHaveBeenCalled();
+        expect(review()).toBeNull();
       });
 
       it('closing the Book, Repair and Sell windows without saving sends nothing', async () => {
@@ -1254,13 +1201,20 @@ describe('MenuComponent', () => {
         expect(telegramApi.send).not.toHaveBeenCalled();
       });
 
-      it('a failed "Mark as sold" (the laptop could not be updated) sends nothing', async () => {
+      it('a sale whose laptop could not be updated sends nothing (the question comes: the sale is sent when it is tried again and works)', async () => {
         await create([SINGLE()]);
-        await sellAndSave();
+        await openLaptop(0);
+        word('Sell', detailPanel()!).click();
+        await settle();
         productsApi['updateProduct'].and.returnValue(throwError(() => ({ error: { error: 'down' } })));
-        word('Mark as sold', review()!).click();
+        invoiceForm().form.warranty = '2_weeks';
+        invoiceForm().submit();
         await settle();
         expect(telegramApi.send).not.toHaveBeenCalled();
+        productsApi['updateProduct'].and.returnValue(of({}));
+        word('Mark as sold', review()!).click();
+        await settle();
+        expect(telegramApi.send).toHaveBeenCalledTimes(1);
       });
     });
 
@@ -1532,8 +1486,6 @@ describe('MenuComponent', () => {
         Object.assign(invoiceForm().form, { warranty: '1_week' });
         invoiceForm().submit();
         await settle();
-        word('Not now', review()!).click();
-        fixture.detectChanges();
         word('Edit', viewer()!).click();
         await settle();
         expect(back(editor()!)).toBeUndefined();

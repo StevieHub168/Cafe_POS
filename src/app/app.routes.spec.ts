@@ -3,7 +3,9 @@ import { SalesComponent } from './components/sales/sales.component';
 import { RepairsComponent } from './components/repairs/repairs.component';
 import { LabelsComponent } from './components/qr/labels.component';
 import { LaptopScanComponent } from './components/scan/laptop-scan.component';
+import { UsersComponent } from './components/users/users.component';
 import { authGuard } from './guards/auth.guard';
+import { adminGuard } from './guards/admin.guard';
 
 describe('routes', () => {
   const find = (path: string) => routes.find(r => r.path === path);
@@ -30,6 +32,12 @@ describe('routes', () => {
     expect(find('l/:code')!.component).toBe(LaptopScanComponent);
     expect(find('l/:code')!.canActivate).toEqual([authGuard]);
     expect(routes.findIndex(r => r.path === 'l/:code')).toBeLessThan(routes.findIndex(r => r.path === '**'));
+  });
+
+  it('Users is a page for an admin only (the admin guard), found before the catch-all', () => {
+    expect(find('users')!.component).toBe(UsersComponent);
+    expect(find('users')!.canActivate).toEqual([adminGuard]);
+    expect(routes.findIndex(r => r.path === 'users')).toBeLessThan(routes.findIndex(r => r.path === '**'));
   });
 
   it('Bookings, Menu, Products and Dashboard are still there', () => {

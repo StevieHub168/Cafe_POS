@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { User } from '../../models/user.model';
@@ -19,7 +19,13 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', route: '/dashboard', icon: 'chart' },
 ];
 
+/** Only for an admin: a second group under "Main". */
+const ADMIN_ITEMS: NavItem[] = [
+  { label: 'Users', route: '/users', icon: 'users' },
+];
+
 const ICON_PATHS: Record<string, string> = {
+  'users': 'M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z',
   'tag': 'M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3zM6 6h.008v.008H6V6z',
   'wrench': 'M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z',
   'document': 'M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z',
@@ -67,6 +73,23 @@ const ICON_PATHS: Record<string, string> = {
           </svg>
           <span>{{ item.label }}</span>
         </a>
+
+        <!-- Admin only -->
+        <ng-container *ngIf="adminItems.length > 0">
+          <p class="px-3 pb-2 pt-4 text-[11px] font-semibold uppercase tracking-wider text-gray-400">Admin</p>
+          <a
+            *ngFor="let item of adminItems"
+            [routerLink]="item.route"
+            routerLinkActive="bg-primary-50 text-primary-700"
+            class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-sidebar-hover hover:text-gray-900"
+            (click)="navigate.emit()"
+          >
+            <svg class="h-5 w-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" [attr.d]="ICON_PATHS[item.icon]" />
+            </svg>
+            <span>{{ item.label }}</span>
+          </a>
+        </ng-container>
       </nav>
 
       <!-- User footer -->
@@ -89,7 +112,7 @@ const ICON_PATHS: Record<string, string> = {
     </aside>
   `,
 })
-export class SidebarComponent {
+export class SidebarComponent implements OnChanges {
   @Input() user: User | null = null;
   @Input() open = false;
   @Output() close = new EventEmitter<void>();
@@ -97,5 +120,11 @@ export class SidebarComponent {
   @Output() logout = new EventEmitter<void>();
 
   navItems = NAV_ITEMS;
+  /** What only an admin sees (kept in a field: a new array on every refresh would make Angular complain). */
+  adminItems: NavItem[] = [];
   ICON_PATHS = ICON_PATHS;
+
+  ngOnChanges(): void {
+    this.adminItems = this.user?.role === 'admin' ? ADMIN_ITEMS : [];
+  }
 }

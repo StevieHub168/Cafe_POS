@@ -9,6 +9,7 @@ import { RepairsComponent } from './components/repairs/repairs.component';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
 import { LabelsComponent } from './components/qr/labels.component';
 import { LaptopScanComponent } from './components/scan/laptop-scan.component';
+import { UsersComponent } from './components/users/users.component';
 import { adminGuard } from './guards/admin.guard';
 import { authGuard } from './guards/auth.guard';
 
@@ -25,6 +26,8 @@ export const routes: Routes = [
   { path: 'invoices', redirectTo: 'sales', pathMatch: 'full' },
   { path: 'dashboard', component: DashboardComponent, canActivate: [authGuard] },
   { path: 'labels', component: LabelsComponent, canActivate: [authGuard] },
+  // Admin only: who can sign in, and reset a password.
+  { path: 'users', component: UsersComponent, canActivate: [adminGuard] },
   // What a QR label opens: the laptop with its status. Signing in first brings you back here (see authGuard).
   { path: 'l/:code', component: LaptopScanComponent, canActivate: [authGuard] },
   { path: '**', redirectTo: '' }

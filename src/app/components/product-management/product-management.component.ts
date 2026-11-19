@@ -16,8 +16,6 @@ import { BookingFormComponent, BookingSaved } from '../bookings/booking-form.com
 import { LaptopQrDrawerComponent } from '../qr/laptop-qr-drawer.component';
 import { ImgSrcPipe } from '../../pipes/img-src.pipe';
 import { shrinkPhoto } from '../../utils/shrink-photo';
-import { bookingDetailsText } from '../../utils/booking-text';
-import { copyToClipboard } from '../../utils/clipboard';
 import { todayIso } from '../../utils/dates';
 import { tookNote } from '../../utils/stock-notes';
 import { TelegramNotifier } from '../../services/telegram-notifier.service';
@@ -298,7 +296,7 @@ export class ProductManagementComponent implements OnInit {
     this.successTimer = setTimeout(() => {
       this.successMessage = '';
       this.savedBooking = null;
-    }, booking ? 10000 : 4000);               // after a booking the notice has buttons in it, so it stays a bit longer
+    }, booking ? 10000 : 4000);               // after a booking the notice has a button in it, so it stays a bit longer
   }
 
   // ---------- the QR code of a laptop (a side drawer) ----------
@@ -324,7 +322,7 @@ export class ProductManagementComponent implements OnInit {
 
   /** The product the Book dialog is open for (null = closed). */
   bookingProduct: Product | null = null;
-  /** The booking just saved: the notice offers "Copy details" and "View bookings" for it. */
+  /** The booking just saved: the notice offers "View bookings" for it. */
   savedBooking: Booking | null = null;
   @ViewChild(BookingFormComponent) private bookingForm?: BookingFormComponent;
 
@@ -352,16 +350,6 @@ export class ProductManagementComponent implements OnInit {
 
   viewBookings(): void {
     this.router.navigateByUrl('/bookings');
-  }
-
-  async copyBookingDetails(booking: Booking): Promise<void> {
-    const copied = await this.copyText(bookingDetailsText(booking));
-    if (copied) this.showSuccess('Booking details copied. Paste them into Telegram.');
-    else this.errorMessage = 'Could not copy. Please try again.';
-  }
-
-  protected copyText(text: string): Promise<boolean> {
-    return copyToClipboard(text);
   }
 
   get filteredProducts(): Product[] {
@@ -964,6 +952,32 @@ export class ProductManagementComponent implements OnInit {
     this.showProductModal = false;
     this.discardUnsavedUploads();          // cancelled: photos uploaded in this form are not needed any more
     this.resetSuggestions();
+  }
+
+  /** True when the last mouse press began INSIDE the window (for example: selecting text in a box). */
+  private pressBeganInside = false;
+
+  onBackdropPress(event: MouseEvent): void {
+    this.pressBeganInside = event.target !== event.currentTarget;
+  }
+
+  /**
+   * A click on the dark area closes the window. But if the press began inside the window and was let go on the dark
+   * area (selecting text and going a little too far), the browser reports a click on the dark area too: that must not
+   * close the window and throw away what was typed.
+   */
+  onBackdropClick(): void {
+    const draggedOut = this.pressBeganInside;
+    this.pressBeganInside = false;
+    if (!draggedOut) this.closeProductModal();
+  }
+
+  /**
+   * A plain Enter in a text box must not save: a stray Enter (the phone keyboard's "Go" key) saved the laptop and
+   * closed the window. Ctrl/⌘ + Enter saves. The description keeps its new line and the buttons keep their Enter.
+   */
+  onFormEnter(event: Event): void {
+    if ((event.target as HTMLElement | null)?.tagName === 'INPUT') event.preventDefault();
   }
 
   // ---------- product photos (up to 8; the first one is the cover) ----------

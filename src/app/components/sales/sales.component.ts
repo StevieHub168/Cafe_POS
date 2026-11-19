@@ -163,11 +163,6 @@ export class SalesComponent implements OnInit {
     return this.countFor('month');
   }
 
-  /** The money that came in on this month's sales (what was paid, not what is still owed). */
-  get receivedThisMonth(): number {
-    return Math.round(this.sales.filter(s => this.isThisMonth(s)).reduce((sum, s) => sum + s.deposit, 0) * 100) / 100;
-  }
-
   get underWarranty(): number {
     return this.countFor('warranty');
   }
