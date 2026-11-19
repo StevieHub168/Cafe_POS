@@ -1,6 +1,6 @@
 import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { BrandLogo, brandLogo } from '../../../utils/brand-logos';
+import { BrandLogo, brandLogo } from '../../../utils/brand-logos/brand-logos';
 
 /**
  * The logo of a laptop brand (Apple, Dell, HP...), drawn inside the box the page gives it: set the size with classes on the

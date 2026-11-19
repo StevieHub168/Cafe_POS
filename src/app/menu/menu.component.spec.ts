@@ -3,16 +3,16 @@ import { By } from '@angular/platform-browser';
 import { Subject, of, throwError } from 'rxjs';
 
 import { MenuComponent } from './menu.component';
-import { ProductService } from '../services/product.service';
-import { CategoryService } from '../services/category.service';
-import { BookingService } from '../services/booking.service';
-import { InvoiceService } from '../services/invoice.service';
-import { RepairService } from '../services/repair.service';
+import { ProductService } from '../services/product/product.service';
+import { CategoryService } from '../services/category/category.service';
+import { BookingService } from '../services/booking/booking.service';
+import { InvoiceService } from '../services/invoice/invoice.service';
+import { RepairService } from '../services/repair/repair.service';
 import { RepairFormComponent } from '../components/repairs/repair-form.component';
 import { BookingFormComponent } from '../components/bookings/booking-form.component';
 import { InvoiceFormComponent } from '../components/invoices/invoice-form.component';
-import { TelegramNotifier } from '../services/telegram-notifier.service';
-import { ScanActionService } from '../services/scan-action.service';
+import { TelegramNotifier } from '../services/telegram-notifier/telegram-notifier.service';
+import { ScanActionService } from '../services/scan-action/scan-action.service';
 
 function product(id: number, images: string[] | undefined, extra: object = {}): any {
   return {

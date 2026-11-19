@@ -1,8 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Subject, of, throwError } from 'rxjs';
 import { MemberFormComponent } from './member-form.component';
-import { AuthService } from '../../services/auth.service';
-import { CreatedUser, User } from '../../models/user.model';
+import { AuthService } from '../../services/auth/auth.service';
+import { CreatedUser, User } from '../../models/user/user.model';
 
 const NEW_USER: User = { id: 9, username: 'mony', email: 'mony@gmail.com', full_name: 'Mony', role: 'staff' };
 const created = (over: Partial<User> = {}): CreatedUser => ({ user: { ...NEW_USER, ...over }, token: 'the-new-members-own-token' });

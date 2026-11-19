@@ -2,8 +2,8 @@ import { Component, EventEmitter, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
-import { AuthService } from '../../services/auth.service';
-import { MIN_PASSWORD, User } from '../../models/user.model';
+import { AuthService } from '../../services/auth/auth.service';
+import { MIN_PASSWORD, User } from '../../models/user/user.model';
 
 type Role = User['role'];
 

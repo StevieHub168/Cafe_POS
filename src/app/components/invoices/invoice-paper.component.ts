@@ -1,8 +1,8 @@
 import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Invoice, MAX_LINES, formatInvoiceNumber, itemAmount, typeInfo, warrantyInfo } from '../../models/invoice.model';
-import { formatDate, parseIso, weekdayName } from '../../utils/dates';
-import { formatMoney } from '../../utils/money';
+import { Invoice, MAX_LINES, formatInvoiceNumber, itemAmount, typeInfo, warrantyInfo } from '../../models/invoice/invoice.model';
+import { formatDate, parseIso, weekdayName } from '../../utils/dates/dates';
+import { formatMoney } from '../../utils/money/money';
 
 interface PaperRow {
   n: number;

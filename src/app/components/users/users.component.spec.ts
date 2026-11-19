@@ -1,9 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Observable, Subject, of, throwError } from 'rxjs';
 import { UsersComponent } from './users.component';
-import { UserService } from '../../services/user.service';
-import { AuthService } from '../../services/auth.service';
-import { CreatedUser, User } from '../../models/user.model';
+import { UserService } from '../../services/user/user.service';
+import { AuthService } from '../../services/auth/auth.service';
+import { CreatedUser, User } from '../../models/user/user.model';
 
 const user = (id: number, username: string, over: Partial<User> = {}): User => ({
   id, username, email: `${username}@laptopshop.com`, full_name: username, role: 'staff', ...over,

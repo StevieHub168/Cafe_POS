@@ -2,11 +2,11 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { Subject, of, throwError } from 'rxjs';
 import { BookingFormComponent, BookingSaved } from './booking-form.component';
-import { BookingService } from '../../services/booking.service';
-import { ProductService } from '../../services/product.service';
+import { BookingService } from '../../services/booking/booking.service';
+import { ProductService } from '../../services/product/product.service';
 import { PhotoUploadComponent } from '../ui/photo-upload/photo-upload.component';
-import { Booking } from '../../models/booking.model';
-import { Product } from '../../models/product.model';
+import { Booking } from '../../models/booking/booking.model';
+import { Product } from '../../models/product/product.model';
 
 // The booking from the shop's own example message.
 const EXAMPLE: Booking = {

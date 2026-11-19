@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { TelegramNotifier, TelegramToast } from '../../../services/telegram-notifier.service';
+import { TelegramNotifier, TelegramToast } from '../../../services/telegram-notifier/telegram-notifier.service';
 
 /**
  * The little box in the bottom corner that says how each message to Telegram went. It is in the app once, so it stays

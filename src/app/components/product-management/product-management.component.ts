@@ -3,12 +3,12 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { catchError, concatMap, finalize, from, map, Observable, of } from 'rxjs';
-import { ProductService } from '../../services/product.service';
-import { CategoryService } from '../../services/category.service';
-import { ExtraPrice, Product } from '../../models/product.model';
-import { Category } from '../../models/category.model';
-import { StockInfo, stockInfo } from '../../models/stock-status';
-import { Booking } from '../../models/booking.model';
+import { ProductService } from '../../services/product/product.service';
+import { CategoryService } from '../../services/category/category.service';
+import { ExtraPrice, Product } from '../../models/product/product.model';
+import { Category } from '../../models/category/category.model';
+import { StockInfo, stockInfo } from '../../models/stock-status/stock-status';
+import { Booking } from '../../models/booking/booking.model';
 import { PageHeaderComponent } from '../ui/page-header/page-header.component';
 import { PaginationComponent } from '../ui/pagination/pagination.component';
 import { SkeletonComponent } from '../ui/skeleton/skeleton.component';
@@ -17,10 +17,10 @@ import { BrandLogoComponent } from '../ui/brand-logo/brand-logo.component';
 import { BookingFormComponent, BookingSaved } from '../bookings/booking-form.component';
 import { LaptopQrDrawerComponent } from '../qr/laptop-qr-drawer.component';
 import { ImgSrcPipe } from '../../pipes/img-src.pipe';
-import { shrinkPhoto } from '../../utils/shrink-photo';
-import { todayIso } from '../../utils/dates';
-import { tookNote } from '../../utils/stock-notes';
-import { TelegramNotifier } from '../../services/telegram-notifier.service';
+import { shrinkPhoto } from '../../utils/shrink-photo/shrink-photo';
+import { todayIso } from '../../utils/dates/dates';
+import { tookNote } from '../../utils/stock-notes/stock-notes';
+import { TelegramNotifier } from '../../services/telegram-notifier/telegram-notifier.service';
 
 // No SKU here: the API creates it automatically (e.g. MAC-007, WIN-ASU-005).
 interface ProductForm {

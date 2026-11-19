@@ -2,14 +2,14 @@ import { Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChange
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
-import { InvoiceService } from '../../services/invoice.service';
+import { InvoiceService } from '../../services/invoice/invoice.service';
 import {
   Invoice, InvoiceInput, InvoiceItem, InvoiceType, MAX_DEVICE, MAX_LINES, MAX_NAME, MAX_PROBLEM, WARRANTY_CHOICES, Warranty,
   formatInvoiceNumber, itemAmount, itemsTotal
-} from '../../models/invoice.model';
-import { Product } from '../../models/product.model';
-import { formatDate, todayIso, weekdayName } from '../../utils/dates';
-import { formatMoney } from '../../utils/money';
+} from '../../models/invoice/invoice.model';
+import { Product } from '../../models/product/product.model';
+import { formatDate, todayIso, weekdayName } from '../../utils/dates/dates';
+import { formatMoney } from '../../utils/money/money';
 
 /** What the form tells its parent after a save. */
 export interface InvoiceSaved {

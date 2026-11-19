@@ -1,6 +1,6 @@
 import { computeStats } from './dashboard-stats';
-import { Category } from '../../models/category.model';
-import { Product } from '../../models/product.model';
+import { Category } from '../../models/category/category.model';
+import { Product } from '../../models/product/product.model';
 
 const MAC: Category = { id: 1, name: 'Mac', brands: ['Apple'] };
 const WINDOWS: Category = { id: 2, name: 'Windows', brands: ['Asus', 'Dell', 'HP', 'Acer', 'Surface', 'MSI'] };

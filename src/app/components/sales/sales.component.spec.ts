@@ -7,14 +7,14 @@ import { SalesComponent } from './sales.component';
 import { InvoiceFormComponent } from '../invoices/invoice-form.component';
 import { InvoiceViewerComponent } from '../invoices/invoice-viewer.component';
 import { RepairFormComponent } from '../repairs/repair-form.component';
-import { InvoiceService } from '../../services/invoice.service';
-import { ProductService } from '../../services/product.service';
-import { RepairService } from '../../services/repair.service';
-import { Invoice } from '../../models/invoice.model';
-import { Product } from '../../models/product.model';
-import { Paged, SalesCounts } from '../../models/paged.model';
-import { isUnderWarranty } from '../../utils/warranty';
-import { TelegramNotifier } from '../../services/telegram-notifier.service';
+import { InvoiceService } from '../../services/invoice/invoice.service';
+import { ProductService } from '../../services/product/product.service';
+import { RepairService } from '../../services/repair/repair.service';
+import { Invoice } from '../../models/invoice/invoice.model';
+import { Product } from '../../models/product/product.model';
+import { Paged, SalesCounts } from '../../models/paged/paged.model';
+import { isUnderWarranty } from '../../utils/warranty/warranty';
+import { TelegramNotifier } from '../../services/telegram-notifier/telegram-notifier.service';
 
 /** Where uploaded photos are served from (the API's address without /api): whatever the app is set to. */
 const apiOrigin = environment.apiUrl.replace(/\/api$/, '');

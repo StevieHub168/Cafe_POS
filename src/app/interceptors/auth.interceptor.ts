@@ -2,7 +2,7 @@ import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { catchError, throwError } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { AuthService } from '../services/auth.service';
+import { AuthService } from '../services/auth/auth.service';
 
 /** Signing in with a wrong password is also a 401: that is a message on the Login page, not a lost session. */
 const SIGN_IN_PATHS = ['/auth/login', '/auth/telegram-login'];

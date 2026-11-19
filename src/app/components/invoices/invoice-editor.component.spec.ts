@@ -3,9 +3,9 @@ import { By } from '@angular/platform-browser';
 import { Subject, of } from 'rxjs';
 import { InvoiceEditorComponent } from './invoice-editor.component';
 import { InvoiceFormComponent, InvoiceSaved } from './invoice-form.component';
-import { InvoiceService } from '../../services/invoice.service';
-import { Invoice, InvoiceType } from '../../models/invoice.model';
-import { Product } from '../../models/product.model';
+import { InvoiceService } from '../../services/invoice/invoice.service';
+import { Invoice, InvoiceType } from '../../models/invoice/invoice.model';
+import { Product } from '../../models/product/product.model';
 
 const SALE: Invoice = {
   id: 7, number: 41, type: 'sale', invoice_date: '2026-11-10', customer_name: 'Sok Dara', phone: null, telegram: null,

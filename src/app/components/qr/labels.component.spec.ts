@@ -2,10 +2,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
 import { Subject, of, throwError } from 'rxjs';
 import { LabelsComponent } from './labels.component';
-import { ProductService } from '../../services/product.service';
-import { ConfigService } from '../../services/config.service';
-import { Product } from '../../models/product.model';
-import { rollPreviewSize } from '../../utils/label-sheet';
+import { ProductService } from '../../services/product/product.service';
+import { ConfigService } from '../../services/config/config.service';
+import { Product } from '../../models/product/product.model';
+import { rollPreviewSize } from '../../utils/label-sheet/label-sheet';
 
 const laptop = (id: number, name: string, code: string | undefined, over: Partial<Product> = {}): Product => ({
   id, sku: `S-${id}`, code, name, category_id: 1, selling_price: 100, stock_quantity: 1, min_stock_level: 0, is_archived: false, ...over,

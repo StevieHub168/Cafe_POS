@@ -2,14 +2,14 @@ import { Component, EventEmitter, HostListener, Input, OnInit, Output, ViewChild
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
-import { RepairService } from '../../services/repair.service';
-import { MAX_REPAIR_DEVICE, MAX_REPAIR_PHOTOS, MAX_REPAIR_PROBLEM, Repair, RepairInput } from '../../models/repair.model';
-import { Invoice, Warranty, formatInvoiceNumber } from '../../models/invoice.model';
-import { Product } from '../../models/product.model';
+import { RepairService } from '../../services/repair/repair.service';
+import { MAX_REPAIR_DEVICE, MAX_REPAIR_PHOTOS, MAX_REPAIR_PROBLEM, Repair, RepairInput } from '../../models/repair/repair.model';
+import { Invoice, Warranty, formatInvoiceNumber } from '../../models/invoice/invoice.model';
+import { Product } from '../../models/product/product.model';
 import { PhotoUploadComponent } from '../ui/photo-upload/photo-upload.component';
 import { ProductSearchComponent } from '../ui/product-search/product-search.component';
-import { formatDate, todayIso, weekdayName } from '../../utils/dates';
-import { warrantyText } from '../../utils/warranty';
+import { formatDate, todayIso, weekdayName } from '../../utils/dates/dates';
+import { warrantyText } from '../../utils/warranty/warranty';
 
 /** What the form tells its parent after a save. */
 export interface RepairSaved {

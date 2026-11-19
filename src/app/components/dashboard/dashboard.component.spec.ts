@@ -2,8 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of, Subject, throwError } from 'rxjs';
 import { DashboardComponent } from './dashboard.component';
-import { ProductService } from '../../services/product.service';
-import { CategoryService } from '../../services/category.service';
+import { ProductService } from '../../services/product/product.service';
+import { CategoryService } from '../../services/category/category.service';
 
 const CATEGORIES = [
   { id: 1, name: 'Mac', brands: ['Apple'] },

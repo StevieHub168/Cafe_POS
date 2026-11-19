@@ -1,9 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Subject, of, throwError } from 'rxjs';
 import { InvoiceFormComponent, InvoiceSaved } from './invoice-form.component';
-import { InvoiceService } from '../../services/invoice.service';
-import { Invoice, InvoiceType } from '../../models/invoice.model';
-import { Product } from '../../models/product.model';
+import { InvoiceService } from '../../services/invoice/invoice.service';
+import { Invoice, InvoiceType } from '../../models/invoice/invoice.model';
+import { Product } from '../../models/product/product.model';
 
 const SALE: Invoice = {
   id: 7, number: 41, type: 'sale', invoice_date: '2026-11-10', customer_name: 'Sok Dara', phone: '012 345 678', telegram: '@sok_dara',

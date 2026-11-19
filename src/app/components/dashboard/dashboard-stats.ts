@@ -1,5 +1,5 @@
-import { Category } from '../../models/category.model';
-import { Product } from '../../models/product.model';
+import { Category } from '../../models/category/category.model';
+import { Product } from '../../models/product/product.model';
 
 export interface BrandCount {
   name: string;

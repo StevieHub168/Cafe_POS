@@ -5,13 +5,13 @@ import { ActivatedRoute } from '@angular/router';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { PageHeaderComponent } from '../ui/page-header/page-header.component';
 import { SkeletonComponent } from '../ui/skeleton/skeleton.component';
-import { Product } from '../../models/product.model';
-import { ProductService } from '../../services/product.service';
-import { ConfigService } from '../../services/config.service';
-import { LABEL_SIZES, LabelPaper, LabelSize, buildLabels, labelSheetHtml, labelsPerPage, rollPreviewSize, specLines } from '../../utils/label-sheet';
-import { isThisComputerOnly, laptopLink } from '../../utils/laptop-link';
-import { productCover } from '../../utils/invoice-photo';
-import { formatMoney } from '../../utils/money';
+import { Product } from '../../models/product/product.model';
+import { ProductService } from '../../services/product/product.service';
+import { ConfigService } from '../../services/config/config.service';
+import { LABEL_SIZES, LabelPaper, LabelSize, buildLabels, labelSheetHtml, labelsPerPage, rollPreviewSize, specLines } from '../../utils/label-sheet/label-sheet';
+import { isThisComputerOnly, laptopLink } from '../../utils/laptop-link/laptop-link';
+import { productCover } from '../../utils/invoice-photo/invoice-photo';
+import { formatMoney } from '../../utils/money/money';
 import { ImgSrcPipe } from '../../pipes/img-src.pipe';
 
 const A4_WIDTH_PX = 794;      // A4 at 96 dpi: the page inside the preview frame

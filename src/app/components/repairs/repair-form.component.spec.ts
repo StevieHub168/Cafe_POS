@@ -2,13 +2,13 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { Subject, of, throwError } from 'rxjs';
 import { RepairFormComponent, RepairSaved } from './repair-form.component';
-import { RepairService } from '../../services/repair.service';
-import { ProductService } from '../../services/product.service';
+import { RepairService } from '../../services/repair/repair.service';
+import { ProductService } from '../../services/product/product.service';
 import { PhotoUploadComponent } from '../ui/photo-upload/photo-upload.component';
-import { Repair } from '../../models/repair.model';
-import { Invoice } from '../../models/invoice.model';
-import { Product } from '../../models/product.model';
-import { todayIso } from '../../utils/dates';
+import { Repair } from '../../models/repair/repair.model';
+import { Invoice } from '../../models/invoice/invoice.model';
+import { Product } from '../../models/product/product.model';
+import { todayIso } from '../../utils/dates/dates';
 
 const TODAY = '2026-11-11';
 

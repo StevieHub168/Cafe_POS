@@ -6,14 +6,14 @@ import { RepairsComponent } from './repairs.component';
 import { RepairFormComponent } from './repair-form.component';
 import { InvoiceFormComponent } from '../invoices/invoice-form.component';
 import { InvoiceViewerComponent } from '../invoices/invoice-viewer.component';
-import { RepairService } from '../../services/repair.service';
-import { InvoiceService } from '../../services/invoice.service';
-import { ProductService } from '../../services/product.service';
-import { Repair } from '../../models/repair.model';
-import { Invoice } from '../../models/invoice.model';
-import { Product } from '../../models/product.model';
-import { Paged, RepairCounts } from '../../models/paged.model';
-import { TelegramNotifier } from '../../services/telegram-notifier.service';
+import { RepairService } from '../../services/repair/repair.service';
+import { InvoiceService } from '../../services/invoice/invoice.service';
+import { ProductService } from '../../services/product/product.service';
+import { Repair } from '../../models/repair/repair.model';
+import { Invoice } from '../../models/invoice/invoice.model';
+import { Product } from '../../models/product/product.model';
+import { Paged, RepairCounts } from '../../models/paged/paged.model';
+import { TelegramNotifier } from '../../services/telegram-notifier/telegram-notifier.service';
 
 /** Where uploaded photos are served from (the API's address without /api): whatever the app is set to. */
 const apiOrigin = environment.apiUrl.replace(/\/api$/, '');

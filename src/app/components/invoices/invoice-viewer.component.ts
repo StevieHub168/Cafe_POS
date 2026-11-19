@@ -1,8 +1,8 @@
 import { Component, EventEmitter, HostListener, Input, OnChanges, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { InvoicePaperComponent } from './invoice-paper.component';
-import { Invoice, formatInvoiceNumber, typeInfo } from '../../models/invoice.model';
-import { printPage, PAPER_HEIGHT, PAPER_WIDTH } from '../../utils/invoice-export';
+import { Invoice, formatInvoiceNumber, typeInfo } from '../../models/invoice/invoice.model';
+import { printPage, PAPER_HEIGHT, PAPER_WIDTH } from '../../utils/invoice-export/invoice-export';
 
 /**
  * Shows the invoice as the paper it prints on, with one button: Print / Save PDF (and Edit). It exists only while it is

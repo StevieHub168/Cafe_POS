@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ProductSearchComponent } from './product-search.component';
-import { Product } from '../../../models/product.model';
+import { Product } from '../../../models/product/product.model';
 
 const product = (id: number, name: string, over: Partial<Product> = {}): Product => ({
   id, sku: `S-${id}`, name, category_id: 1, brand: 'Apple', model: '', selling_price: 999, extra_prices: [], stock_quantity: 1,

@@ -2,11 +2,11 @@ import { Component, EventEmitter, HostListener, Input, OnInit, Output } from '@a
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { finalize } from 'rxjs';
-import { BookingService } from '../../services/booking.service';
-import { Booking, PickupResult } from '../../models/booking.model';
-import { WARRANTY_CHOICES, Warranty } from '../../models/invoice.model';
-import { formatDate } from '../../utils/dates';
-import { formatMoney } from '../../utils/money';
+import { BookingService } from '../../services/booking/booking.service';
+import { Booking, PickupResult } from '../../models/booking/booking.model';
+import { WARRANTY_CHOICES, Warranty } from '../../models/invoice/invoice.model';
+import { formatDate } from '../../utils/dates/dates';
+import { formatMoney } from '../../utils/money/money';
 
 /**
  * "Customer picked up": the customer is here for the laptop they booked. One button closes the booking, makes the Sale

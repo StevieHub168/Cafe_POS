@@ -1,4 +1,4 @@
-import { ScanActionService } from '../../services/scan-action.service';
+import { ScanActionService } from '../../services/scan-action/scan-action.service';
 import { environment } from '../../../environments/environment';
 import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
@@ -7,16 +7,16 @@ import { BookingsComponent } from './bookings.component';
 import { BookingFormComponent } from './booking-form.component';
 import { InvoiceFormComponent } from '../invoices/invoice-form.component';
 import { InvoiceViewerComponent } from '../invoices/invoice-viewer.component';
-import { BookingService } from '../../services/booking.service';
-import { ProductService } from '../../services/product.service';
-import { InvoiceService } from '../../services/invoice.service';
-import { ShareService } from '../../services/share.service';
+import { BookingService } from '../../services/booking/booking.service';
+import { ProductService } from '../../services/product/product.service';
+import { InvoiceService } from '../../services/invoice/invoice.service';
+import { ShareService } from '../../services/share/share.service';
 import { BookingPickupComponent } from './booking-pickup.component';
-import { Booking } from '../../models/booking.model';
-import { BookingCounts, Paged } from '../../models/paged.model';
-import { Invoice } from '../../models/invoice.model';
-import { Product } from '../../models/product.model';
-import { TelegramNotifier } from '../../services/telegram-notifier.service';
+import { Booking } from '../../models/booking/booking.model';
+import { BookingCounts, Paged } from '../../models/paged/paged.model';
+import { Invoice } from '../../models/invoice/invoice.model';
+import { Product } from '../../models/product/product.model';
+import { TelegramNotifier } from '../../services/telegram-notifier/telegram-notifier.service';
 
 /** Where uploaded photos are served from (the API's address without /api): whatever the app is set to. */
 const apiOrigin = environment.apiUrl.replace(/\/api$/, '');

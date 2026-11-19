@@ -3,13 +3,13 @@ import { ActivatedRoute, convertToParamMap, ParamMap, Router } from '@angular/ro
 import { By } from '@angular/platform-browser';
 import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 import { ProductManagementComponent } from './product-management.component';
-import { ProductService } from '../../services/product.service';
-import { CategoryService } from '../../services/category.service';
-import { BookingService } from '../../services/booking.service';
+import { ProductService } from '../../services/product/product.service';
+import { CategoryService } from '../../services/category/category.service';
+import { BookingService } from '../../services/booking/booking.service';
 import { BookingFormComponent } from '../bookings/booking-form.component';
-import { Category } from '../../models/category.model';
-import { TelegramNotifier } from '../../services/telegram-notifier.service';
-import { ConfigService } from '../../services/config.service';
+import { Category } from '../../models/category/category.model';
+import { TelegramNotifier } from '../../services/telegram-notifier/telegram-notifier.service';
+import { ConfigService } from '../../services/config/config.service';
 
 const MAC: Category = { id: 1, name: 'Mac', brands: ['Apple'], product_count: 0 };
 const WINDOWS: Category = { id: 2, name: 'Windows', brands: ['Asus', 'Dell', 'HP', 'Acer', 'Surface', 'MSI'], product_count: 0 };

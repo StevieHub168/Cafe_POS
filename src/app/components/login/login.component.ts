@@ -2,8 +2,8 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { AuthService } from '../../services/auth.service';
-import { safeReturnUrl, scannedCodeOf } from '../../utils/return-url';
+import { AuthService } from '../../services/auth/auth.service';
+import { safeReturnUrl, scannedCodeOf } from '../../utils/return-url/return-url';
 
 @Component({
   selector: 'app-login',

@@ -1,13 +1,13 @@
 import { Component, EventEmitter, HostListener, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { Product } from '../../models/product.model';
-import { ConfigService } from '../../services/config.service';
-import { QrDrawing, QR_BORDER, qrDrawing, qrPng } from '../../utils/qr';
-import { isThisComputerOnly, laptopLink } from '../../utils/laptop-link';
-import { downloadBlob } from '../../utils/invoice-export';
-import { productCover } from '../../utils/invoice-photo';
-import { formatMoney } from '../../utils/money';
+import { Product } from '../../models/product/product.model';
+import { ConfigService } from '../../services/config/config.service';
+import { QrDrawing, QR_BORDER, qrDrawing, qrPng } from '../../utils/qr/qr';
+import { isThisComputerOnly, laptopLink } from '../../utils/laptop-link/laptop-link';
+import { downloadBlob } from '../../utils/invoice-export/invoice-export';
+import { productCover } from '../../utils/invoice-photo/invoice-photo';
+import { formatMoney } from '../../utils/money/money';
 import { ImgSrcPipe } from '../../pipes/img-src.pipe';
 
 /**

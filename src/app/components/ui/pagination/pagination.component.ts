@@ -1,6 +1,6 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { PAGE_SIZES } from '../../../utils/page-state';
+import { PAGE_SIZES } from '../../../utils/page-state/page-state';
 
 /**
  * The bar under a list that has pages: "Showing 11–20 of 134", the "Per page" box (only when there is something to choose), and Previous / page numbers / Next.

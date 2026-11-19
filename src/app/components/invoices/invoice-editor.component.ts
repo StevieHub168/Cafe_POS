@@ -1,9 +1,9 @@
 import { Component, EventEmitter, HostListener, Input, Output, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { InvoiceFormComponent, InvoiceSaved } from './invoice-form.component';
-import { Invoice, InvoiceType, formatInvoiceNumber, typeInfo } from '../../models/invoice.model';
-import { Product } from '../../models/product.model';
-import { todayIso } from '../../utils/dates';
+import { Invoice, InvoiceType, formatInvoiceNumber, typeInfo } from '../../models/invoice/invoice.model';
+import { Product } from '../../models/product/product.model';
+import { todayIso } from '../../utils/dates/dates';
 
 /**
  * The window to write a new invoice or change one: a panel from the right edge (like the product and booking forms) with

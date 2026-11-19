@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { InvoicePaperComponent } from './invoice-paper.component';
-import { Invoice } from '../../models/invoice.model';
+import { Invoice } from '../../models/invoice/invoice.model';
 
 const SALE: Invoice = {
   id: 1, number: 41, type: 'sale', invoice_date: '2026-11-10', customer_name: 'Sok Dara', phone: '012 345 678', telegram: '@sok_dara',

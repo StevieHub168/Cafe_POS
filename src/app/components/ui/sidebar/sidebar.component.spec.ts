@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { SidebarComponent } from './sidebar.component';
-import { User } from '../../../models/user.model';
+import { User } from '../../../models/user/user.model';
 
 describe('SidebarComponent', () => {
   let fixture: ComponentFixture<SidebarComponent>;

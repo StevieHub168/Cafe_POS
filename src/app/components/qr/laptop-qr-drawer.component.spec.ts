@@ -2,8 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { of } from 'rxjs';
 import { LaptopQrDrawerComponent } from './laptop-qr-drawer.component';
-import { ConfigService } from '../../services/config.service';
-import { Product } from '../../models/product.model';
+import { ConfigService } from '../../services/config/config.service';
+import { Product } from '../../models/product/product.model';
 
 const LAPTOP: Product = {
   id: 7, sku: 'MAC-005', code: 'LP-0042', name: 'MacBook Air 13" M1', category_id: 1, category_name: 'Mac', brand: 'Apple',

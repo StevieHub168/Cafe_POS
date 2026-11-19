@@ -1,9 +1,9 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { RouterOutlet, NavigationEnd, Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
-import { AuthService } from './services/auth.service';
+import { AuthService } from './services/auth/auth.service';
 import { Observable, Subject, takeUntil } from 'rxjs';
-import { User } from './models/user.model';
+import { User } from './models/user/user.model';
 import { SidebarComponent } from './components/ui/sidebar/sidebar.component';
 import { HeaderComponent } from './components/ui/header/header.component';
 import { TelegramToastsComponent } from './components/ui/telegram-toasts/telegram-toasts.component';

@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Subject, of, throwError } from 'rxjs';
 import { PhotoUploadComponent } from './photo-upload.component';
-import { ProductService } from '../../../services/product.service';
+import { ProductService } from '../../../services/product/product.service';
 
 const file = (name: string, type = 'image/png', size = 100) => new File([new Uint8Array(size)], name, { type });
 

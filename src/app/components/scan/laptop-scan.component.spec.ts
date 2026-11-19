@@ -2,16 +2,16 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
 import { BehaviorSubject, NEVER, of, throwError } from 'rxjs';
 import { LaptopScanComponent } from './laptop-scan.component';
-import { ProductService } from '../../services/product.service';
-import { BookingService } from '../../services/booking.service';
-import { RepairService } from '../../services/repair.service';
-import { InvoiceService } from '../../services/invoice.service';
-import { ScanActionService } from '../../services/scan-action.service';
-import { Product } from '../../models/product.model';
-import { Booking } from '../../models/booking.model';
-import { Repair } from '../../models/repair.model';
-import { Invoice } from '../../models/invoice.model';
-import { toIso } from '../../utils/dates';
+import { ProductService } from '../../services/product/product.service';
+import { BookingService } from '../../services/booking/booking.service';
+import { RepairService } from '../../services/repair/repair.service';
+import { InvoiceService } from '../../services/invoice/invoice.service';
+import { ScanActionService } from '../../services/scan-action/scan-action.service';
+import { Product } from '../../models/product/product.model';
+import { Booking } from '../../models/booking/booking.model';
+import { Repair } from '../../models/repair/repair.model';
+import { Invoice } from '../../models/invoice/invoice.model';
+import { toIso } from '../../utils/dates/dates';
 
 /** "YYYY-MM-DD" of a day this many days from today. */
 const inDays = (n: number): string => { const d = new Date(); d.setDate(d.getDate() + n); return toIso(d); };
