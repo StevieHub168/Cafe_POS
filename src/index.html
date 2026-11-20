@@ -10,14 +10,26 @@
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
   <link rel="icon" type="image/png" sizes="192x192" href="favicon.png">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- The cover shown while the app loads: plain CSS, so it paints before any script (src/app/services/splash-screen hides it) -->
+  <link href="styles/splash-screen.css" rel="stylesheet">
+  <noscript><style>#splash-screen { display: none; }</style></noscript>
   <script src="https://telegram.org/js/telegram-web-app.js" defer></script>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <!-- Fonts load without holding the page back (media="print" until they have arrived), so the cover above shows at once. -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <!-- Khmer fonts for the printed invoices -->
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Khmer:wght@400;600;700&family=Moul&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Khmer:wght@400;600;700&family=Moul&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Khmer:wght@400;600;700&family=Moul&display=swap" rel="stylesheet">
+  </noscript>
 </head>
 <body class="mat-typography">
+  <!-- The cover: our logo and three dots until the first page is ready -->
+  <div id="splash-screen" role="status" aria-label="Loading">
+    <div class="logo" aria-hidden="true"></div>
+    <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
+  </div>
+
   <app-root></app-root>
 </body>
 </html>
